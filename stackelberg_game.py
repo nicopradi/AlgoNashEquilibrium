@@ -32,8 +32,15 @@ class Stackelberg:
                 ExoUtility      Value of the utility for the exogene variables
                 EndoCoef        Beta coefficient of the endogene variables
                 xi              Error term values
+                #### Optional kwargs ####
+                Operator        Mapping between alternative and operators
+                Optimizer       Index of the current operator
+                p_fixed         Fixed price of the alternatives managed by other operators
+                p_fixed         Fixed availability of the alternatives managed by other operators
+
         '''
         ## TODO: Add kwargs for capacity/no capacity, continuous price/discrete price
+        ## TODO: Check correctness of the attributes value
         self.I = kwargs.get('I', 2)
         self.N = kwargs.get('N', 10)
         self.R = kwargs.get('R', 50)
@@ -50,13 +57,17 @@ class Stackelberg:
         self.ExoUtility = kwargs.get('ExoUtility')
         self.EndoCoef = kwargs.get('EndoCoef')
         self.xi = kwargs.get('xi')
+        # Optinal keyword arguments
+        self.Operator = kwargs.get('Operator', None)
+        self.Optimizer = kwargs.get('Optimizer', None)
+        self.p_fixed = kwargs.get('p_fixed', [])
+        self.y_fixed = kwargs.get('y_fixed', [])
 
     def getModel(self):
         ''' Construct a CPLEX model corresponding the a Stackelberg game (1 leader,
         1 follower).
             Returns:
                 model          CPLEX model
-
         '''
 
         model = cplex.Cplex() # Initialize the model
@@ -116,7 +127,7 @@ class Stackelberg:
         for i in range(self.I + 1):
             for n in range(self.N):
                 for r in range(self.R):
-                    if i > 0:
+                    if (i > 0) and ((self.Optimizer is None) or (self.Operator[i] == self.Optimizer)):
                         model.variables.add(obj = [1.0/self.R], types = [model.variables.type.continuous],
                                             lb = [-cplex.infinity], ub = [cplex.infinity],
                                             names = ['alpha[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']'])
@@ -133,6 +144,22 @@ class Stackelberg:
 
         ##### Add the constraints #####
 
+        ##### Fixed price/alternatives
+
+        # The price/availability of the alternatives not managed by the current optimizer are fixed
+        if self.p_fixed is not None:
+            for i in range(self.I + 1):
+                if (i > 0) and (self.Operator[i] != self.Optimizer):
+                    indices = ['p[' + str(i) + ']']
+                    coefs = [1.0]
+                    model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                 senses = 'E',
+                                                 rhs = [self.p_fixed[i]])
+                    indices = ['y[' + str(i) + ']']
+                    coefs = [1.0]
+                    model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                 senses = 'E',
+                                                 rhs = [self.y_fixed[i]])
         ##### Choice Availability
 
         # Each customer choose one alternative
@@ -376,10 +403,19 @@ class Stackelberg:
         return model
 
     def solveModel(self, model):
+        ''' Solve the given model, return the solved model.
+            Args:
+                model          cplex model to solve
+            Returns:
+                model          cplex model solved
+        '''
         try:
-            print("\n\n-----------SOLUTION : -----------\n")
+            print("--SOLUTION : --")
+            model.set_results_stream(None)
+            model.set_warning_stream(None)
             model.solve()
             print(model.solution.get_objective_value())
+            return model
         except CplexSolverError as e:
             print('Exception raised during dual of restricted problem')
 
