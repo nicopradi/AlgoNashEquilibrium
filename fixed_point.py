@@ -122,9 +122,7 @@ class Fixed_Point:
                                     names = ['vAft[' + str(k) + ']' + '[' + str(l) + ']'])
 
         ## LEVEL 2 : CUSTOMER LEVEL
-
         ## BEFORE
-
         # Availability at scenario level, as result of the choices of other customers
         for i in range(self.I + 1):
             for n in range(self.N):
