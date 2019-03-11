@@ -11,8 +11,10 @@ from cplex.exceptions import CplexSolverError
 import numpy as np
 # data
 import Data.Sequential.Parking_MLF_SequentialGame_i2k2n50r5_Cap as data_file
+import Data.Non_linear_Stackelberg.Parking_Stackelberg_i2n10r50_Cap as data_file_2
 # Stackelberg
 import stackelberg_game
+import non_linear_stackelberg
 
 class Sequential:
 
@@ -34,8 +36,8 @@ class Sequential:
         self.y_fixed = kwargs.get('y_fixed', np.full((1, len(self.Operator)), 1.0))
         self.p_history = np.full((self.maxIter, len(self.Operator)), -1.0)
 
-    def run(self, data):
-        ''' Run the sequential game
+    def run(self, data, linearized=True):
+        ''' Run the sequential game with the linearized Stackelberg game
             Args:
                 data:          dictionary containing data to instanciate the Stackelberg game
         '''
@@ -50,12 +52,18 @@ class Sequential:
                     print('The operator %r fixed the price of alternative %r to %r'
                            %(self.Operator[index], index, p))
             # Run the game for the current optimizer
-            sub_game = stackelberg_game.Stackelberg(**data)
-            model = sub_game.getModel()
-            model = sub_game.solveModel(model)
+            if linearized is True:
+                sub_game = stackelberg_game.Stackelberg(**data)
+                model = sub_game.getModel()
+                model = sub_game.solveModel(model)
+                prices = []
+                for i in range(len(self.Operator)):
+                    prices.append(model.solution.get_values('p[' + str(i) + ']'))
+            else:
+                prices = non_linear_stackelberg.main(data)
             # Update the price history
             for i in range(len(self.Operator)):
-                self.p_history[iter, i] = model.solution.get_values('p[' + str(i) + ']')
+                self.p_history[iter, i] = prices[i]
             # Check for the cycle
             if iter >= self.K:
                 cycle = True
@@ -88,8 +96,9 @@ class Sequential:
 
         print('Price history: %r' %self.p_history)
 
-
 if __name__ == '__main__':
+    '''
+    # LINEAR
     stackelberg_dict = data_file.getData()
     data_file.preprocess(stackelberg_dict)
 
@@ -102,4 +111,19 @@ if __name__ == '__main__':
     sequential_game = Sequential(**sequential_dict)
     # Update the dict with the attributes for the Stackelberg game
     sequential_dict.update(stackelberg_dict)
-    sequential_game.run(sequential_dict)
+    sequential_game.run(sequential_dict, linearized=True)
+    '''
+    # NON LINEAR
+    stackelberg_dict = data_file_2.getData()
+    data_file_2.preprocess(stackelberg_dict)
+
+    sequential_dict = {'K': 2,
+                    'Operator': [0, 1, 2],
+                    'maxIter': 60,
+                    'Optimizer': 2,
+                    'p_fixed': [0.0, 0.5, -1.0],
+                    'y_fixed': [1.0, 1.0, 1.0]}
+    sequential_game = Sequential(**sequential_dict)
+    # Update the dict with the attributes for the Stackelberg game
+    sequential_dict.update(stackelberg_dict)
+    sequential_game.run(sequential_dict, linearized=False)
