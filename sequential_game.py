@@ -26,7 +26,6 @@ class Sequential:
                 p_fixed    Current prices of the other operator's alternatives
                 p_fixed    Current availabilty of the other operator's alternatives
         '''
-        #TODO: Add
         self.K = kwargs.get('K', 1)
         self.Operator = kwargs.get('Operator', np.full((1, self.K + 1), 1))
         self.maxIter = kwargs.get('maxIter', 10)
