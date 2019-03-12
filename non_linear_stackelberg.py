@@ -267,7 +267,9 @@ def main(data):
     # Solve the problem
     #
     x, info = nlp.solve(x0)
-
+    # Change the sign of the optimal objective function value
+    # (conversion of a maximimazion problem to a minimization)
+    info['obj_val'] = -info['obj_val']
     print("Solution of the primal variables: x=%s\n" % repr(x))
 
     print("Solution of the dual variables: lambda=%s\n" % repr(info['mult_g']))
