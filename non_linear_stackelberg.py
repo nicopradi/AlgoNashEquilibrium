@@ -9,7 +9,7 @@ import ipopt
 # numpy
 import numpy as np
 # data
-import Data.Non_linear_Stackelberg.Parking_Stackelberg_i2n10r50_Cap as data_file
+import Data.Non_linear_Stackelberg.ProbLogit_n50 as data_file
 
 class Stackelberg(object):
     def __init__(self, **kwargs):
