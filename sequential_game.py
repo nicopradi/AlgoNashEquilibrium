@@ -11,7 +11,7 @@ from cplex.exceptions import CplexSolverError
 import numpy as np
 # data
 import Data.Sequential.Parking_MLF_SequentialGame_i2k2n50r5_Cap as data_file
-import Data.Non_linear_Stackelberg.Parking_Stackelberg_i2n10r50_Cap as data_file_2
+import Data.Non_linear_Stackelberg.ProbLogit_n10 as data_file_2
 # Stackelberg
 import stackelberg_game
 import non_linear_stackelberg
@@ -66,13 +66,13 @@ class Sequential:
                 self.p_history[iter, i] = prices[i]
             # Check for the cycle
             if iter >= self.K:
-                cycle = True
                 iteration_to_check = range(iter-self.K, -1, -self.K)
                 print('ITERATION TO CHECK: %r' %list(iteration_to_check))
                 for j in iteration_to_check:
+                    cycle = True
                     for i in range(len(self.Operator)):
                         # TODO: Numerical error ? Tolerance to 1e-6
-                        if abs(self.p_history[j, i] - self.p_history[iter, i]) > 1e-6:
+                        if abs(self.p_history[j, i] - self.p_history[iter, i]) > 1e-4:
                             cycle = False
                     if cycle is True:
                         cycle_iter = j
@@ -114,16 +114,19 @@ if __name__ == '__main__':
     sequential_game.run(sequential_dict, linearized=True)
     '''
     # NON LINEAR
-    stackelberg_dict = data_file_2.getData()
-    data_file_2.preprocess(stackelberg_dict)
+    for p_1 in np.arange(0, 1.01, 0.05):
+        for p_2 in np.arange(0, 1.01, 0.05):
+            print('GAME WITH INITIAL P_1 = %r P_2 = %r' %(p_1, p_2))
+            stackelberg_dict = data_file_2.getData()
+            data_file_2.preprocess(stackelberg_dict)
 
-    sequential_dict = {'K': 2,
-                    'Operator': [0, 1, 2],
-                    'maxIter': 60,
-                    'Optimizer': 2,
-                    'p_fixed': [0.0, 0.5, -1.0],
-                    'y_fixed': [1.0, 1.0, 1.0]}
-    sequential_game = Sequential(**sequential_dict)
-    # Update the dict with the attributes for the Stackelberg game
-    sequential_dict.update(stackelberg_dict)
-    sequential_game.run(sequential_dict, linearized=False)
+            sequential_dict = {'K': 2,
+                            'Operator': [0, 1, 2],
+                            'maxIter': 50,
+                            'Optimizer': 1,
+                            'p_fixed': [0.0, p_1, p_2],
+                            'y_fixed': [1.0, 1.0, 1.0]}
+            sequential_game = Sequential(**sequential_dict)
+            # Update the dict with the attributes for the Stackelberg game
+            sequential_dict.update(stackelberg_dict)
+            sequential_game.run(sequential_dict, linearized=False)
