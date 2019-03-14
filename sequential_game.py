@@ -97,7 +97,6 @@ class Sequential:
         print('Price history: %r' %self.p_history)
 
 if __name__ == '__main__':
-    '''
     # LINEAR
     stackelberg_dict = data_file.getData()
     data_file.preprocess(stackelberg_dict)
@@ -109,24 +108,23 @@ if __name__ == '__main__':
                     'p_fixed': [0.0, 0.5, -1.0],
                     'y_fixed': [1.0, 1.0, 1.0]}
     sequential_game = Sequential(**sequential_dict)
-    # Update the dict with the attributes for the Stackelberg game
+    # Update the dict with the attributes of the Stackelberg game
     sequential_dict.update(stackelberg_dict)
     sequential_game.run(sequential_dict, linearized=True)
     '''
     # NON LINEAR
-    for p_1 in np.arange(0, 1.01, 0.05):
-        for p_2 in np.arange(0, 1.01, 0.05):
-            print('GAME WITH INITIAL P_1 = %r P_2 = %r' %(p_1, p_2))
-            stackelberg_dict = data_file_2.getData()
-            data_file_2.preprocess(stackelberg_dict)
 
-            sequential_dict = {'K': 2,
-                            'Operator': [0, 1, 2],
-                            'maxIter': 50,
-                            'Optimizer': 1,
-                            'p_fixed': [0.0, p_1, p_2],
-                            'y_fixed': [1.0, 1.0, 1.0]}
-            sequential_game = Sequential(**sequential_dict)
-            # Update the dict with the attributes for the Stackelberg game
-            sequential_dict.update(stackelberg_dict)
-            sequential_game.run(sequential_dict, linearized=False)
+    stackelberg_dict = data_file_2.getData()
+    data_file_2.preprocess(stackelberg_dict)
+
+    sequential_dict = {'K': 2,
+                    'Operator': [0, 1, 2],
+                    'maxIter': 200,
+                    'Optimizer': 1,
+                    'p_fixed': [0.0, -1.0, 0.5],
+                    'y_fixed': [1.0, 1.0, 1.0]}
+    sequential_game = Sequential(**sequential_dict)
+    # Update the dict with the attributes for the Stackelberg game
+    sequential_dict.update(stackelberg_dict)
+    sequential_game.run(sequential_dict, linearized=False)
+    '''

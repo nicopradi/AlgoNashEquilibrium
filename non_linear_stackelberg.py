@@ -9,7 +9,7 @@ import ipopt
 # numpy
 import numpy as np
 # data
-import Data.Non_linear_Stackelberg.ProbLogit_n50 as data_file
+import Data.Non_linear_Stackelberg.ProbLogit_n10 as data_file
 
 class Stackelberg(object):
     def __init__(self, **kwargs):
@@ -115,7 +115,6 @@ class Stackelberg(object):
                     expression = x[self.p[i]] - self.p_fixed[i]
                     constraints.append(expression)
 
-        #print('Constraints : %r' %constraints)
         return constraints
 
     def jacobian(self, x):
@@ -262,21 +261,40 @@ def main(data):
                 cl=cl,
                 cu=cu
                 )
-
-    #
+    # Set the parameters
+    nlp.addOption('print_level', 0)
     # Solve the problem
-    #
     x, info = nlp.solve(x0)
     # Change the sign of the optimal objective function value
     # (conversion of a maximimazion problem to a minimization)
     info['obj_val'] = -info['obj_val']
-    print("Solution of the primal variables: x=%s\n" % repr(x))
-
-    print("Solution of the dual variables: lambda=%s\n" % repr(info['mult_g']))
-
-    print("Objective=%s\n" % repr(info['obj_val']))
+    # Print the solution
+    printSolution(data, x, info)
 
     return x[:data['I'] + 1]
+
+def printSolution(data, x, info):
+
+    print('Decision variables: \n')
+    # Price variables
+    counter = 0
+    for i in range(data['I'] + 1):
+        print('Price of alternative %r: %r'%(i, x[counter]))
+        counter += 1
+    print('\n')
+    # Utility variables
+    for i in range(data['I'] + 1):
+        for n in range(data['N']):
+            print('Utility of alternative %r for user %r : %r'%(i, n, x[counter]))
+            counter += 1
+    print('\n')
+    # Choice variables
+    for i in range(data['I'] + 1):
+        for n in range(data['N']):
+            print('Choice of alternative %r for user %r : %r'%(i, n, x[counter]))
+            counter += 1
+    print('\n')
+    print("Objective function(revenue) = %r\n" % info['obj_val'])
 
 if __name__ == '__main__':
     # Get the data and preprocess
