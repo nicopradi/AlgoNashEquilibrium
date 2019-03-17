@@ -10,7 +10,7 @@ from cplex.exceptions import CplexSolverError
 # numpy
 import numpy as np
 # data
-import Data.Sequential.Parking_MLF_SequentialGame_i2k2n50r5_Cap as data_file
+import Data.Stackelberg.MILPLogit_n05r050 as data_file
 import Data.Non_linear_Stackelberg.ProbLogit_n10 as data_file_2
 # Stackelberg
 import stackelberg_game
@@ -37,7 +37,7 @@ class Sequential:
         self.p_history = np.full((self.maxIter, len(self.Operator)), -1.0)
 
     def run(self, data, linearized=True):
-        ''' Run the sequential game with the linearized Stackelberg game
+        ''' Run the sequential game with the Stackelberg game
             Args:
                 data:          dictionary containing data to instanciate the Stackelberg game
         '''

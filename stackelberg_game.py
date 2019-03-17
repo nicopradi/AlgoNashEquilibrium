@@ -9,7 +9,7 @@ from cplex.exceptions import CplexSolverError
 # numpy
 import numpy as np
 #data
-import Data.Stackelberg.Parking_Stackelberg_i2n10r50_Cap as data_file
+import Data.Stackelberg.MILPLogit_n10r050 as data_file
 
 class Stackelberg:
 
@@ -44,11 +44,11 @@ class Stackelberg:
         self.I = kwargs.get('I', 2)
         self.N = kwargs.get('N', 10)
         self.R = kwargs.get('R', 50)
-        self.ChoiceSet = kwargs.get('ChoiceSet')
-        self.Capacity = kwargs.get('Capacity')
-        self.PriorityList = kwargs.get('PriorityList')
-        self.lb_p = kwargs.get('lb_p')
-        self.ub_p = kwargs.get('ub_p')
+        self.ChoiceSet = kwargs.get('ChoiceSet', None)
+        self.Capacity = kwargs.get('Capacity', None)
+        self.PriorityList = kwargs.get('PriorityList', None)
+        self.lb_p = kwargs.get('lb_p', np.zeros(self.I + 1))
+        self.ub_p = kwargs.get('ub_p', np.zeros(self.I + 1))
         self.lb_U = kwargs.get('lb_U')
         self.ub_U = kwargs.get('ub_U')
         self.lb_Umin = kwargs.get('lb_Umin')
@@ -60,8 +60,8 @@ class Stackelberg:
         # Optinal keyword arguments
         self.Operator = kwargs.get('Operator', None)
         self.Optimizer = kwargs.get('Optimizer', None)
-        self.p_fixed = kwargs.get('p_fixed', [])
-        self.y_fixed = kwargs.get('y_fixed', [])
+        self.p_fixed = kwargs.get('p_fixed', None)
+        self.y_fixed = kwargs.get('y_fixed', None)
 
     def getModel(self):
         ''' Construct a CPLEX model corresponding the a Stackelberg game (1 leader,
@@ -206,69 +206,71 @@ class Stackelberg:
                                              rhs = [1.0])
 
         # Alternative not available at scnerio level if not included in the ChoiceSet
-        for i in range(self.I + 1):
-            for n in range(self.N):
-                for r in range(self.R):
-                    if self.ChoiceSet[i, n] == 0:
-                        indices = ['y_scen[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
-                        coefs = [1.0]
-                        model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                                     senses = 'E',
-                                                     rhs = [0.0])
+        if self.ChoiceSet is not None:
+            for i in range(self.I + 1):
+                for n in range(self.N):
+                    for r in range(self.R):
+                        if self.ChoiceSet[i, n] == 0:
+                            indices = ['y_scen[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
+                            coefs = [1.0]
+                            model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                         senses = 'E',
+                                                         rhs = [0.0])
 
         ##### Capacity constraints
-        for i in range(1, self.I + 1): # Do not consider opt-out
-            for r in range(self.R):
-                indices = []
-                coefs = []
-                for n in range(self.N):
-                    indices.append('w[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']')
-                    coefs.append(1.0)
-                model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                             senses = 'L',
-                                             rhs = [self.Capacity[i]])
-
-        # Priority list: if alternative not available at scenario level,
-        # then the capacity is reached, or the alternative is not available in the choice set
-        for i in range(1, self.I + 1): # Do not consider opt-out
-            for n in range(self.N):
+        if self.Capacity is not None:
+            for i in range(1, self.I + 1): # Do not consider opt-out
                 for r in range(self.R):
                     indices = []
                     coefs = []
-                    # Sum of the customers which have priority
-                    for m in range(self.N):
-                        if self.PriorityList[i, m] < self.PriorityList[i, n]:
-                            indices.append('w[' + str(i) + ']' + '[' + str(m) + ']' + '[' + str(r) + ']')
-                            coefs.append(-1.0)
-                    indices.append('y[' + str(i) + ']')
-                    coefs.append(self.Capacity[i]*self.ChoiceSet[i, n])
-                    indices.append('y_scen[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']')
-                    coefs.append(-self.Capacity[i]*self.ChoiceSet[i, n])
-                    # Add the constraint
+                    for n in range(self.N):
+                        indices.append('w[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']')
+                        coefs.append(1.0)
                     model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                                  senses = 'L',
-                                                 rhs = [0.0])
+                                                 rhs = [self.Capacity[i]])
 
-        # Priority list: if alternative is available at scenario level,
-        # then there is still some free capacity for the customer
-        for i in range(1, self.I + 1): # Do not consider opt-out
-            for r in range(self.R):
+            # Priority list: if alternative not available at scenario level,
+            # then the capacity is reached, or the alternative is not available in the choice set
+            for i in range(1, self.I + 1): # Do not consider opt-out
                 for n in range(self.N):
-                    if (self.PriorityList[i, n] > self.Capacity[i]) and \
-                       (self.ChoiceSet[i, n] == 1):
-                       indices = []
-                       coefs = []
-                       # Sum of the customers which have priority
-                       for m in range(self.N):
-                           if self.PriorityList[i, m] < self.PriorityList[i, n]:
-                               indices.append('w[' + str(i) + ']' + '[' + str(m) + ']' + '[' + str(r) + ']')
-                               coefs.append(1.0)
-                       indices.append('y_scen[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']')
-                       coefs.append(-self.Capacity[i] + self.PriorityList[i, n])
-                       # Add the constraint
-                       model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                                    senses = 'L',
-                                                    rhs = [self.PriorityList[i, n] - 1.0])
+                    for r in range(self.R):
+                        indices = []
+                        coefs = []
+                        # Sum of the customers which have priority
+                        for m in range(self.N):
+                            if self.PriorityList[i, m] < self.PriorityList[i, n]:
+                                indices.append('w[' + str(i) + ']' + '[' + str(m) + ']' + '[' + str(r) + ']')
+                                coefs.append(-1.0)
+                        indices.append('y[' + str(i) + ']')
+                        coefs.append(self.Capacity[i]*self.ChoiceSet[i, n])
+                        indices.append('y_scen[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']')
+                        coefs.append(-self.Capacity[i]*self.ChoiceSet[i, n])
+                        # Add the constraint
+                        model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                     senses = 'L',
+                                                     rhs = [0.0])
+
+            # Priority list: if alternative is available at scenario level,
+            # then there is still some free capacity for the customer
+            for i in range(1, self.I + 1): # Do not consider opt-out
+                for r in range(self.R):
+                    for n in range(self.N):
+                        if (self.PriorityList[i, n] > self.Capacity[i]) and \
+                           (self.ChoiceSet[i, n] == 1):
+                           indices = []
+                           coefs = []
+                           # Sum of the customers which have priority
+                           for m in range(self.N):
+                               if self.PriorityList[i, m] < self.PriorityList[i, n]:
+                                   indices.append('w[' + str(i) + ']' + '[' + str(m) + ']' + '[' + str(r) + ']')
+                                   coefs.append(1.0)
+                           indices.append('y_scen[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']')
+                           coefs.append(-self.Capacity[i] + self.PriorityList[i, n])
+                           # Add the constraint
+                           model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                        senses = 'L',
+                                                        rhs = [self.PriorityList[i, n] - 1.0])
         #### Price-choice constraints
 
         # Bound on price for each alternatives
@@ -329,43 +331,56 @@ class Stackelberg:
                 for r in range(self.R):
                     indices = ['U[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
                                'p[' + str(i) + ']']
-                    coefs = [1.0, -self.EndoCoef[i, n, r]]
+                    coefs = [1.0, -self.EndoCoef[i, n]]
                     model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                                  senses = 'E',
-                                                 rhs = [self.ExoUtility[i, n, r] + self.xi[i, n, r]])
+                                                 rhs = [self.ExoUtility[i, n] + self.xi[i, n, r]])
 
         #### Discounted utility function
-        for i in range(self.I + 1):
-            for n in range(self.N):
-                for r in range(self.R):
-                    indices = ['z[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
-                    coefs = [1.0]
-                    # Discounted utility greater than utility lower bound
-                    model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                                 senses = 'G',
-                                                 rhs = [self.lb_Umin[n, r]])
-                    indices = ['z[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
-                               'y_scen[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
-                    coefs = [1.0, -self.M[n, r]]
-                    # Discounted utility equal to utility lower bound if alternative not available
-                    model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                                 senses = 'L',
-                                                 rhs = [self.lb_Umin[n, r]])
-                    indices = ['U[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
-                               'y_scen[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
-                               'z[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
-                    coefs = [1.0, self.M[n, r], -1.0]
-                    # Discounted utility equal to utility if alternative available
-                    model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                                 senses = 'L',
-                                                 rhs = [self.M[n, r]])
-                    indices = ['z[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
-                               'U[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
-                    coefs = [1.0, -1.0]
-                    # Discounted utility greater than utility lower bound
-                    model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                                 senses = 'L',
-                                                 rhs = [0.0])
+        if self.Capacity is not None:
+            for i in range(self.I + 1):
+                for n in range(self.N):
+                    for r in range(self.R):
+                        indices = ['z[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
+                        coefs = [1.0]
+                        # Discounted utility greater than utility lower bound
+                        model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                     senses = 'G',
+                                                     rhs = [self.lb_Umin[n, r]])
+                        indices = ['z[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
+                                   'y_scen[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
+                        coefs = [1.0, -self.M[n, r]]
+                        # Discounted utility equal to utility lower bound if alternative not available
+                        model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                     senses = 'L',
+                                                     rhs = [self.lb_Umin[n, r]])
+                        indices = ['U[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
+                                   'y_scen[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
+                                   'z[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
+                        coefs = [1.0, self.M[n, r], -1.0]
+                        # Discounted utility equal to utility if alternative available
+                        model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                     senses = 'L',
+                                                     rhs = [self.M[n, r]])
+                        indices = ['z[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
+                                   'U[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
+                        coefs = [1.0, -1.0]
+                        # Discounted utility greater than utility lower bound
+                        model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                     senses = 'L',
+                                                     rhs = [0.0])
+        else:
+            # Assume y = 1 for each alternative
+            for i in range(self.I + 1):
+                for n in range(self.N):
+                    for r in range(self.R):
+                        indices = ['z[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
+                                   'U[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
+                        coefs = [1.0, -1.0]
+                        # Discounted utility greater than utility lower bound
+                        model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                     senses = 'E',
+                                                     rhs = [0.0])
 
         #### Utility-choice constraints
         # The selected alternative is the one with the highest utility
@@ -411,13 +426,18 @@ class Stackelberg:
         '''
         try:
             print("--SOLUTION : --")
-            model.set_results_stream(None)
-            model.set_warning_stream(None)
+            #model.set_results_stream(None)
+            #model.set_warning_stream(None)
             model.solve()
             print(model.solution.get_objective_value())
+            for i in range(self.I +1):
+                print('Price of alt %r : %r' %(i, model.solution.get_values('p[' + str(i) + ']')))
             return model
         except CplexSolverError as e:
             print('Exception raised during dual of restricted problem')
+
+
+        solution.get_values([0, 4, 5])
 
 if __name__ == '__main__':
     # Get the data and preprocess

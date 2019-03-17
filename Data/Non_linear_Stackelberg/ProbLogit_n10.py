@@ -16,8 +16,8 @@ def getData():
     dict['N'] = 10
 
     # Lower and upper bound on prices
-    dict['lb_p'] = np.array([0, 0.00, 0.00]) # lower bound (FSP, PSP, PUP)
-    dict['ub_p'] = np.array([0, 1.00, 1.00]) # upper bound (FSP, PSP, PUP)
+    dict['lb_p'] = np.array([0, 0.0, 0.0]) # lower bound (FSP, PSP, PUP)
+    dict['ub_p'] = np.array([0, 1.0, 1.0]) # upper bound (FSP, PSP, PUP)
 
     # Parameters choice model
     dict['ASC_PSP'] = 32

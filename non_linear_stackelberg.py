@@ -275,6 +275,7 @@ def main(data):
 
 def printSolution(data, x, info):
 
+    print('\nResults:')
     print('Decision variables: \n')
     # Price variables
     counter = 0
@@ -282,6 +283,7 @@ def printSolution(data, x, info):
         print('Price of alternative %r: %r'%(i, x[counter]))
         counter += 1
     print('\n')
+    '''
     # Utility variables
     for i in range(data['I'] + 1):
         for n in range(data['N']):
@@ -295,10 +297,13 @@ def printSolution(data, x, info):
             counter += 1
     print('\n')
     print("Objective function(revenue) = %r\n" % info['obj_val'])
+    '''
 
 if __name__ == '__main__':
     # Get the data and preprocess
     data = data_file.getData()
     data_file.preprocess(data)
     # Solve the non linear model
+    t0 = time.time()
     main(data)
+    print('Total running time: %r ' %(time.time() - t0))
