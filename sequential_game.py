@@ -4,13 +4,14 @@
 import sys
 import time
 import copy
+import matplotlib.pyplot as plt
 # CPLEX
 import cplex
 from cplex.exceptions import CplexSolverError
 # numpy
 import numpy as np
 # data
-import Data.Stackelberg.MILPLogit_n05r050 as data_file
+import Data.Stackelberg.MILPLogit_n05r100 as data_file
 import Data.Non_linear_Stackelberg.ProbLogit_n10 as data_file_2
 # Stackelberg
 import stackelberg_game
@@ -35,6 +36,8 @@ class Sequential:
         self.p_fixed = kwargs.get('p_fixed', np.full((1, len(self.Operator)), 1.0))
         self.y_fixed = kwargs.get('y_fixed', np.full((1, len(self.Operator)), 1.0))
         self.p_history = np.full((self.maxIter, len(self.Operator)), -1.0)
+        # Make a copy of the initial optimizer
+        self.InitialOptimizer = self.Optimizer
 
     def run(self, data, linearized=True):
         ''' Run the sequential game with the Stackelberg game
@@ -96,6 +99,27 @@ class Sequential:
 
         print('Price history: %r' %self.p_history)
 
+    def plotGraphs(self):
+        ''' Plot the value of the fixed prices for each optimizer as a function
+            of the iterations number.
+        '''
+        if self.InitialOptimizer == 1:
+            p_history_1 = [prices[1] for prices in self.p_history][::2]
+            p_history_2 = [prices[2] for prices in self.p_history][1::2]
+        else:
+            p_history_1 = [prices[1] for prices in self.p_history][1::2]
+            p_history_2 = [prices[2] for prices in self.p_history][::2]
+
+        plt.plot(p_history_2)
+        plt.ylabel('Operator 2 prices')
+        plt.title('Operator 2 prices as a function of the iteration number')
+        plt.show()
+
+        plt.plot(p_history_1)
+        plt.ylabel('Operator 1 prices')
+        plt.title('Operator 1 prices as a function of the iteration number')
+        plt.show()
+
 if __name__ == '__main__':
     # LINEAR
     stackelberg_dict = data_file.getData()
@@ -103,7 +127,7 @@ if __name__ == '__main__':
 
     sequential_dict = {'K': 2,
                     'Operator': [0, 1, 2],
-                    'maxIter': 20,
+                    'maxIter': 50,
                     'Optimizer': 2,
                     'p_fixed': [0.0, 0.5, -1.0],
                     'y_fixed': [1.0, 1.0, 1.0]}
@@ -111,6 +135,7 @@ if __name__ == '__main__':
     # Update the dict with the attributes of the Stackelberg game
     sequential_dict.update(stackelberg_dict)
     sequential_game.run(sequential_dict, linearized=True)
+    sequential_game.plotGraphs()
     '''
     # NON LINEAR
 

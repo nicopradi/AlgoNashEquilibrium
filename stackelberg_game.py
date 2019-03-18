@@ -1,4 +1,4 @@
-# Modelisation of the Stackelberg game with continuous price and capacity
+# Modelisation of the Stackelberg game with continuous price and capacity constraints
 
 # General
 import sys
@@ -8,7 +8,7 @@ import cplex
 from cplex.exceptions import CplexSolverError
 # numpy
 import numpy as np
-#data
+# data
 import Data.Stackelberg.MILPLogit_n10r050 as data_file
 
 class Stackelberg:
@@ -36,7 +36,7 @@ class Stackelberg:
                 Operator        Mapping between alternative and operators
                 Optimizer       Index of the current operator
                 p_fixed         Fixed price of the alternatives managed by other operators
-                p_fixed         Fixed availability of the alternatives managed by other operators
+                y_fixed         Fixed availability of the alternatives managed by other operators
 
         '''
         ## TODO: Add kwargs for capacity/no capacity, continuous price/discrete price

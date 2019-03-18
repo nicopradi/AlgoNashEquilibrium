@@ -1,10 +1,12 @@
-# Modelisation of the sequential game with continuous price in a non linear n^mdoel
+# Modelisation of the sequential game with continuous price in a non linear model
 
 # General
 import sys
 import time
 import copy
 # Ipopt
+# Documentation/Example about ipopt:
+# https://pythonhosted.org/ipopt/tutorial.html
 import ipopt
 # numpy
 import numpy as np
@@ -13,6 +15,18 @@ import Data.Non_linear_Stackelberg.ProbLogit_n10 as data_file
 
 class Stackelberg(object):
     def __init__(self, **kwargs):
+        ''' Construct a non linear Stackelberg game.
+            KeywordArgs:
+                I               Number of alternatives
+                N               Number of customers
+                EndoCoef        Beta coefficient of the endogene variables
+                ExoUtility      Value of the utility for the exogene variables
+                #### Optional kwargs ####
+                Optimizer       Index of the current operator
+                Operator        Mapping between alternative and operators
+                p_fixed         Fixed price of the alternatives managed by other operators
+                y_fixed         Fixed availability of the alternatives managed by other operators
+        '''
         # Keyword arguments
         self.I = kwargs.get('I')
         self.N = kwargs.get('N')
@@ -47,22 +61,21 @@ class Stackelberg(object):
                 current_index += 1
 
     def objective(self, x):
-        #
-        # The callback for calculating the objective
-        # This is a minimization problem
-        #
+        ''' The callback for calculating the objective
+            This is a minimization problem.
+        '''
         expression = 0.0
         for i in range(self.I + 1):
             if (self.Optimizer is None) or (self.Operator[i] == self.Optimizer):
                 for n in range(self.N):
+                    # Note that this is a minimization problem.
                     expression += -(x[self.p[i]] * x[self.w[i, n]])
 
         return expression
 
     def gradient(self, x):
-        #
-        # The callback for calculating the gradient
-        #
+        ''' The callback for calculating the gradient.
+        '''
         gradient = []
         # Price
         for i in range(len(self.p)):
@@ -87,9 +100,8 @@ class Stackelberg(object):
         return np.asarray(gradient)
 
     def constraints(self, x):
-        #
-        # The callback for calculating the constraints
-        #
+        ''' The callback for calculating the constraints.
+        '''
         constraints = []
         # Probabilistic choice
         for i in range(len(self.w)):
@@ -118,9 +130,8 @@ class Stackelberg(object):
         return constraints
 
     def jacobian(self, x):
-        #
-        # The callback for calculating the Jacobian
-        #
+        ''' The callback for calculating the Jacobian.
+        '''
         jacobian = []
         # For each constraint
             # For each variable
@@ -205,10 +216,11 @@ class Stackelberg(object):
         return jacobian
 
 def main(data):
-    #
-    # Define the problem
-    #
+    ''' Define the problem.
+    '''
+    # x0 is the starting point of the interior point method
     x0 = []
+    # Lower bound and upper bound on the decision variables
     lb = []
     ub = []
     # Price variables
@@ -231,10 +243,10 @@ def main(data):
                 x0.append(0.0)
             lb.append(0.0)
             ub.append(1.0)
-
+    # Lower bound and upper bound on the constraints
     cl = []
     cu = []
-    #TODO: Adjust tolerance
+    #TODO: Adjust tolerance value
     # Probabilistic choice
     for i in range(data['I'] + 1):
         for n in range(data['N']):
@@ -266,7 +278,7 @@ def main(data):
     # Solve the problem
     x, info = nlp.solve(x0)
     # Change the sign of the optimal objective function value
-    # (conversion of a maximimazion problem to a minimization)
+    # (conversion of a minimization problem to a maximization)
     info['obj_val'] = -info['obj_val']
     # Print the solution
     printSolution(data, x, info)
