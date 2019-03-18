@@ -3,6 +3,8 @@
 # Then the sequential game is performed, starting from an initial unvisited configuration.
 # The algorithm stops when all the possible configurations () have been explored
 
+#TODO: Make the variables/method names consistent
+
 # General
 import sys
 import time
@@ -24,7 +26,6 @@ class NashHeuristic(object):
                 K                Number of operators
                 I                Number of alternatives
                 Operator         Mapping between alternatives and operators
-                Optimizer        Index of the current operator
                 InitialOptimizer Index of the operator who started the run
                 EndoVar          Mapping between alternatives and corresponding endogene variables
         '''
@@ -47,11 +48,12 @@ class NashHeuristic(object):
         for k in range(1, self.K + 1):
             for i in range(1, self.I + 1):
                 if self.Operator[i] == k:
-                    # Get the variable corresponding to the alternative
+                    # Get the endogenous variables corresponding to the alternative
                     vars = self.EndoVar[i]
                     for key in vars.keys():
                         var = vars[key]
                         if var['domain'] == 'C':
+                            # Generate all the possible ranges for the corresponding variables
                             range_lb = [var['lb'] + n * (var['ub'] - var['lb'])/var['step']
                                         for n in range(var['step'])]
 
@@ -60,14 +62,20 @@ class NashHeuristic(object):
                         else:
                             raise NotImplementedError('To be implemented')
                         for n in range(var['step']):
+                            # For the moment we suppose that the price is the only endogenous
+                            # variables. Each strategy is added to the corresponding operator strategy set
                             self.mapping[k].append({key: [range_lb[n], range_ub[n]]})
 
     def constructTables(self):
-        ''' Construct tables. Each table represent all the possible configurations
-            (cartesian product of the operator's strategies) given the current optimizer
+        ''' Construct tables. Each table represents all the possible configurations
+            (cartesian product of the operator's strategies) given the current optimizer.
+            The entry in the tables will be equal to 1 if the corresponding configuration yields a
+            strategy nash equilibrium in the next itertion. Otherwise it is equal to 0.
         '''
+        # Note that the first array in tables corresponds to: operator 1 optimizing.
         self.tables = []
         for k in range(1, self.K + 1):
+            # Get the size of the strategy set for each operator, except the current one
             table_dim = [len(self.mapping[l]) for l in range(1, self.K + 1) if l != k]
             table = np.full(table_dim, -1)
             self.tables.append(table)
@@ -80,6 +88,7 @@ class NashHeuristic(object):
         iter = 1
         cycle = False
         cycle_iter = 0
+        # visited is True if the current configuration has already been visited before
         visited = False
         p_history = [data['p_fixed']]
 
@@ -92,7 +101,7 @@ class NashHeuristic(object):
                 if p != -1.0:
                     print('Initial price of alternative %r set by operator %r : %r'
                            %(index, self.Operator[index], p))
-            # Run the game for the current optimizer
+            # Run the game with the initial configuration
             prices = non_linear_stackelberg.main(data)
             # Update the price history
             p_history[iter] = copy.deepcopy(prices)
@@ -102,7 +111,7 @@ class NashHeuristic(object):
                 for j in iteration_to_check:
                     cycle = True
                     for i in range(self.I + 1):
-                        # TODO: Numerical error ?
+                        # TODO: Tolerance value ?
                         if abs(p_history[j][i] - p_history[iter][i]) > 1e-4:
                             cycle = False
                     if cycle is True:
@@ -118,7 +127,7 @@ class NashHeuristic(object):
             self.Optimizer = data['Optimizer']
             # Check if the next configuration has already been visited
             visited = self.alreadyVisited(prices)
-            # Fix the price of the operators except for the next optimizer
+            # Change the fixed price of the operators except for the next optimizer
             data['p_fixed'] = copy.deepcopy(prices)
             for (i, k) in enumerate(self.Operator):
                 if k == data['Optimizer']:
@@ -126,6 +135,7 @@ class NashHeuristic(object):
             # Go to the next iteration
             iter += 1
 
+        # Update the tables
         if cycle and iter-cycle_iter == self.K:
             self.updateTables(p_history, nash = 1)
         elif cycle:
@@ -136,10 +146,11 @@ class NashHeuristic(object):
             self.updateTables(p_history, nash = 0)
 
     def alreadyVisited(self, prices):
-        ''' Check whether a given configuration have already been visited before.
+        ''' Check whether a given configuration has already been visited before.
             Args:
                 prices          list of prices for each alternatives
         '''
+        # Get the strategy indices for the current operators's strategy
         reverse_indices = []
         for k in range(1, self.K + 1):
             for i, price in enumerate(prices):
@@ -147,6 +158,7 @@ class NashHeuristic(object):
                     lb = self.EndoVar[i]['p']['lb']
                     ub = self.EndoVar[i]['p']['ub']
                     step = self.EndoVar[i]['p']['step']
+                    # reverse_index contains the strategy index
                     reverse_index = math.floor(-lb + (price*step)/(ub-lb))
                     reverse_indices.append(reverse_index)
         if self.K == 2:
@@ -168,6 +180,7 @@ has already been visited before.'%(self.Optimizer, prices))
         print('\n- Update the tables -')
         current_oper = self.InitialOptimizer
         for (iter, prices) in enumerate(p_history):
+            # Get the strategy indices for the current operators's strategy defined by prices
             reverse_indices = []
             for k in range(1, self.K + 1):
                 for (i, price) in enumerate(prices):
@@ -182,8 +195,10 @@ has already been visited before.'%(self.Optimizer, prices))
                 if (current_oper == self.initial_state[0]) and (reverse_indices[0] == self.initial_state[1]):
                     not_found = True
                     while not_found:
+                        # Try the increment the strategy index of the operation in initial_state
                         self.initial_state[1] += 1
                         if self.initial_state[1] == len(self.mapping[current_oper]):
+                            # All the strategy indices of the operation in initial_state have been visited.
                             # The next operator starts
                             self.initial_state[0] += 1
                             if self.initial_state[0] > self.K:
@@ -207,6 +222,7 @@ has already been visited before.'%(self.Optimizer, prices))
             current_oper = (current_oper % self.K) + 1
 
     def run(self, data):
+        # Construct the mapping and the tables
         self.constructMapping()
         self.constructTables()
         # Initialize the initial state of the sequential game
@@ -219,7 +235,7 @@ has already been visited before.'%(self.Optimizer, prices))
             self.InitialOptimizer = self.initial_state[0]
             data['Optimizer'] = self.initial_state[0]
             self.Optimizer = self.initial_state[0]
-            # Get an initial fixed price in the initial state
+            # Compute the initial fixed prices to the corresponding initial state
             p_fixed = []
             for i in range(self.I + 1):
                 if i == 0:
@@ -234,8 +250,11 @@ has already been visited before.'%(self.Optimizer, prices))
                                                   lb + (self.initial_state[1] + 1)*(ub-lb)/step))
 
             data['p_fixed'] = copy.deepcopy(np.asarray(p_fixed))
+            # Run the sequential game
             self.sequentialGame(data)
             run_number += 1
+
+        # Print the final results
         print('\n--- FINAL RESULTS ---')
         for (k, table) in enumerate(self.tables):
             # The operator index starts at 1. 0 is opt-out
@@ -255,8 +274,8 @@ if __name__ == '__main__':
                 'Operator': [0, 1, 2],
                 'Optimizer': 1,
                 'EndoVar': {0:{'p':{'domain': 'C', 'lb': 0.0, 'ub': 0.0, 'step':1}},
-                            1:{'p':{'domain': 'C', 'lb': 0.0, 'ub': 1.0, 'step':50}},
-                            2:{'p':{'domain': 'C', 'lb': 0.0, 'ub': 1.0, 'step':50}}}
+                            1:{'p':{'domain': 'C', 'lb': 0.0, 'ub': 1.0, 'step':100}},
+                            2:{'p':{'domain': 'C', 'lb': 0.0, 'ub': 1.0, 'step':100}}}
                 }
     # Instanciate the heuristic game
     game = NashHeuristic(**nash_dict)
