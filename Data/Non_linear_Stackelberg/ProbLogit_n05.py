@@ -19,6 +19,13 @@ def getData():
     dict['lb_p'] = np.array([0, 0.00, 0.00]) # lower bound (FSP, PSP, PUP)
     dict['ub_p'] = np.array([0, 1.00, 1.00]) # upper bound (FSP, PSP, PUP)
 
+    dict['Capacity'] = np.array([60.0, 20.0, 20.0]) # Availability for each alternative (opt-out always available)
+    # Choice set of the customers
+    #	 		           n1 n2 n3...
+    dict['ChoiceSet'] = np.array([[1, 1, 1, 1, 1],  # OPT-OUT
+                       			  [1, 1, 1, 1, 1],  # PSP
+                    	 		  [1, 1, 1, 1, 1]])  # PUP
+
     # Parameters choice model
     dict['ASC_PSP'] = 32
     dict['ASC_PUP'] = 34
@@ -56,6 +63,19 @@ def preprocess(dict):
     '''
 
     ########## Precomputation ##########
+    # Priority list
+    priority_list = np.empty([dict['I'] + 1, dict['N']])
+    for i in range(dict['I'] + 1):
+        min = 1
+        max = dict['N']
+        for n in range(dict['N']):
+            if dict['ChoiceSet'][i, n] == 1:
+                priority_list[i, n] = min
+                min += 1
+            else:
+                priority_list[i, n] = max
+                min -= 1
+    dict['PriorityList'] = priority_list
 
     # Exogene utility
     exo_utility = np.empty([dict['I'] + 1, dict['N']])
