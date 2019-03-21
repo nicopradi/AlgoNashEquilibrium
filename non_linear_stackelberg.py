@@ -489,7 +489,6 @@ def main(data):
     # Fixed prices constraints
     if 'Optimizer' in data.keys():
         for i in range(data['I'] + 1):
-            print('OPTIMIZER %r' %data['Optimizer'])
             if data['Operator'][i] != data['Optimizer']:
                 cl.append(-1e-6)
                 cu.append(1e-6)
