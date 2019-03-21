@@ -139,7 +139,8 @@ class NashHeuristic(object):
             iter += 1
 
         # Update the tables
-        if cycle and iter-cycle_iter == self.K:
+        #
+        if cycle and (iter - 1)-cycle_iter == self.K:
             self.updateTables(p_history, nash = 1)
         elif cycle:
             self.updateTables(p_history, nash = 0)
@@ -257,14 +258,14 @@ has already been visited before.'%(self.Optimizer, prices))
             self.sequentialGame(data)
             run_number += 1
 
-        # Print the final results
-        print('\n--- FINAL RESULTS ---')
-        for (k, table) in enumerate(self.tables):
-            # The operator index starts at 1. 0 is opt-out
-            print('\nOptimizer %r' %(k + 1))
-            print('Prices \t\t Nash Equilibrium found\n')
-            for (p_range, value) in zip(self.mapping[k + 1], self.tables[k]):
-                print('%r \t\t %r' %(list(p_range.values())[0], value))
+            # Print the final results
+            print('\n--- FINAL RESULTS ---')
+            for (k, table) in enumerate(self.tables):
+                # The operator index starts at 1. 0 is opt-out
+                print('\nOptimizer %r' %(k + 1))
+                print('Prices \t\t Nash Equilibrium found\n')
+                for (p_range, value) in zip(self.mapping[k + 1], self.tables[k]):
+                    print('%r \t\t %r' %(list(p_range.values())[0], value))
 
 
 if __name__ == '__main__':
