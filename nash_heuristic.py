@@ -21,7 +21,7 @@ import non_linear_stackelberg
 
 class NashHeuristic(object):
     def __init__(self, **kwargs):
-        ''' Construct a Stackelberg game.
+        ''' Construct a Nash Heuristic game.
             KeywordArgs:
                 K                Number of operators
                 I                Number of alternatives
@@ -54,6 +54,7 @@ class NashHeuristic(object):
                         var = vars[key]
                         if var['domain'] == 'C':
                             # Generate all the possible ranges for the corresponding variables
+                            # All the subsets (price's range) have the same size
                             range_lb = [var['lb'] + n * (var['ub'] - var['lb'])/var['step']
                                         for n in range(var['step'])]
 
@@ -112,8 +113,10 @@ class NashHeuristic(object):
                     cycle = True
                     for i in range(self.I + 1):
                         # TODO: Tolerance value ?
-                        if abs(p_history[j][i] - p_history[iter][i]) > 1e-4:
-                            cycle = False
+                        # Ignore the price of the alternative managed by the current optimizer
+                        if self.Operator[i] != self.Optimizer:
+                            if abs(p_history[j][i] - p_history[iter][i]) > 1e-3:
+                                cycle = False
                     if cycle is True:
                         cycle_iter = j
                         if iter-cycle_iter == self.K:

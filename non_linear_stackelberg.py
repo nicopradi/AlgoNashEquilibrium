@@ -489,6 +489,7 @@ def main(data):
     # Fixed prices constraints
     if 'Optimizer' in data.keys():
         for i in range(data['I'] + 1):
+            print('OPTIMIZER %r' %data['Optimizer'])
             if data['Operator'][i] != data['Optimizer']:
                 cl.append(-1e-6)
                 cu.append(1e-6)
@@ -530,7 +531,7 @@ def main(data):
                 cu=cu
                 )
     # Set the parameters
-    #nlp.addOption('print_level', 0)
+    nlp.addOption('print_level', 0)
     nlp.addOption('max_iter', 3000)
     # Solve the problem
     x, info = nlp.solve(x0)
@@ -552,6 +553,7 @@ def printSolution(data, x, info):
         print('Price of alternative %r: %r'%(i, x[counter]))
         counter += 1
     print('\n')
+    '''
     # Utility variables
     for i in range(data['I'] + 1):
         for n in range(data['N']):
@@ -571,6 +573,7 @@ def printSolution(data, x, info):
                 print('Availability of alternative %r for user %r : %r'%(i, n, x[counter]))
                 counter += 1
         print('\n')
+    '''
     print("Objective function(revenue) = %r\n" % info['obj_val'])
 
 

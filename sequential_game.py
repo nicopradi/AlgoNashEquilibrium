@@ -11,7 +11,7 @@ from cplex.exceptions import CplexSolverError
 # numpy
 import numpy as np
 # data
-import Data.Stackelberg.MILPLogit_n05r100 as data_file
+import Data.Stackelberg.MILPLogit_n10r100 as data_file
 import Data.Non_linear_Stackelberg.ProbLogit_n10 as data_file_2
 # Stackelberg
 import stackelberg_game
@@ -38,6 +38,7 @@ class Sequential:
         self.p_history = np.full((self.maxIter, len(self.Operator)), -1.0)
         # Make a copy of the initial optimizer
         self.InitialOptimizer = self.Optimizer
+        self.InitialPrice = copy.deepcopy(self.p_fixed)
 
     def run(self, data, linearized=True):
         ''' Run the sequential game with the Stackelberg game
@@ -47,7 +48,6 @@ class Sequential:
         iter = 0
         cycle = False
         cycle_iter = 0
-        # TODO: Add histories
         while (iter < self.maxIter) and cycle is False:
             print('\n--- ITERATION %r ----' %iter)
             for (index, p) in enumerate(self.p_fixed):
@@ -74,9 +74,11 @@ class Sequential:
                 for j in iteration_to_check:
                     cycle = True
                     for i in range(len(self.Operator)):
-                        # TODO: Numerical error ? Tolerance to 1e-6
-                        if abs(self.p_history[j, i] - self.p_history[iter, i]) > 1e-4:
-                            cycle = False
+                        # Ignore the price of the alternative managed by the current optimizer
+                        if self.Operator[i] != self.Optimizer:
+                            # TODO: Numerical error ? Tolerance 1e-6
+                            if abs(self.p_history[j, i] - self.p_history[iter, i]) > 1e-3:
+                                cycle = False
                     if cycle is True:
                         cycle_iter = j
                         if iter-cycle_iter == self.K:
@@ -99,57 +101,59 @@ class Sequential:
 
         print('Price history: %r' %self.p_history)
 
-    def plotGraphs(self):
+    def plotGraphs(self, title):
         ''' Plot the value of the fixed prices for each optimizer as a function
             of the iterations number.
         '''
-        if self.InitialOptimizer == 1:
-            p_history_1 = [prices[1] for prices in self.p_history][::2]
-            p_history_2 = [prices[2] for prices in self.p_history][1::2]
-        else:
-            p_history_1 = [prices[1] for prices in self.p_history][1::2]
-            p_history_2 = [prices[2] for prices in self.p_history][::2]
 
-        plt.plot(p_history_2)
-        plt.ylabel('Operator 2 prices')
-        plt.title('Operator 2 prices as a function of the iteration number')
-        plt.show()
+        # Get the price history for each operators
+        p_history_1 = [prices[1] for prices in self.p_history if prices[1] != -1]
+        p_history_2 = [prices[2] for prices in self.p_history if prices[2] != -1]
+        # Plot them
+        plt.plot(p_history_2, label='Operator 2 price', color='blue')
+        plt.plot(p_history_1, label='Operator 1 price', color='red')
+        plt.ylabel('Price')
+        plt.title("Operator's prices as a function of the iteration number. \
+        \n The initial prices are: Operator 1: %r and Operator 2: %r" %(self.InitialPrice[1], self.InitialPrice[2]))
+        plt.legend()
+        plt.savefig('price_history_%r.png' %(title))
+        plt.close()
 
-        plt.plot(p_history_1)
-        plt.ylabel('Operator 1 prices')
-        plt.title('Operator 1 prices as a function of the iteration number')
-        plt.show()
 
 if __name__ == '__main__':
     # LINEAR
     stackelberg_dict = data_file.getData()
     data_file.preprocess(stackelberg_dict)
 
-    sequential_dict = {'K': 2,
-                    'Operator': [0, 1, 2],
-                    'maxIter': 50,
-                    'Optimizer': 2,
-                    'p_fixed': [0.0, 0.5, -1.0],
-                    'y_fixed': [1.0, 1.0, 1.0]}
-    sequential_game = Sequential(**sequential_dict)
-    # Update the dict with the attributes of the Stackelberg game
-    sequential_dict.update(stackelberg_dict)
-    sequential_game.run(sequential_dict, linearized=True)
-    sequential_game.plotGraphs()
+    for initial_price in np.arange(0.1, 1.01, 0.1):
+        initial_price = round(float(initial_price), 3)
+        sequential_dict = {'K': 2,
+                        'Operator': [0, 1, 2],
+                        'maxIter': 50,
+                        'Optimizer': 1,
+                        'p_fixed': [0.0, -1.0, initial_price],
+                        'y_fixed': [1.0, 1.0, 1.0]}
+        sequential_game = Sequential(**sequential_dict)
+        # Update the dict with the attributes of the Stackelberg game
+        sequential_dict.update(stackelberg_dict)
+        sequential_game.run(sequential_dict, linearized=True)
+        sequential_game.plotGraphs(initial_price)
     '''
     # NON LINEAR
-
     stackelberg_dict = data_file_2.getData()
     data_file_2.preprocess(stackelberg_dict)
 
-    sequential_dict = {'K': 2,
-                    'Operator': [0, 1, 2],
-                    'maxIter': 200,
-                    'Optimizer': 1,
-                    'p_fixed': [0.0, -1.0, 0.5],
-                    'y_fixed': [1.0, 1.0, 1.0]}
-    sequential_game = Sequential(**sequential_dict)
-    # Update the dict with the attributes for the Stackelberg game
-    sequential_dict.update(stackelberg_dict)
-    sequential_game.run(sequential_dict, linearized=False)
+    for initial_price in np.arange(0.1, 1.01, 0.1):
+        initial_price = float(round(float(initial_price), 3))
+        sequential_dict = {'K': 2,
+                        'Operator': [0, 1, 2],
+                        'maxIter': 50,
+                        'Optimizer': 2,
+                        'p_fixed': [0.0, initial_price, -1.0],
+                        'y_fixed': [1.0, 1.0, 1.0]}
+        sequential_game = Sequential(**sequential_dict)
+        # Update the dict with the attributes for the Stackelberg game
+        sequential_dict.update(stackelberg_dict)
+        sequential_game.run(sequential_dict, linearized=False)
+        sequential_game.plotGraphs(initial_price)
     '''
