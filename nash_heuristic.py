@@ -113,16 +113,16 @@ class NashHeuristic(object):
                     cycle = True
                     for i in range(self.I + 1):
                         # TODO: Tolerance value ?
-                        # Ignore the price of the alternative managed by the current optimizer
-                        if self.Operator[i] != self.Optimizer:
-                            if abs(p_history[j][i] - p_history[iter][i]) > 1e-3:
-                                cycle = False
+                        if abs(p_history[j][i] - p_history[iter][i]) > 1e-3:
+                            cycle = False
                     if cycle is True:
                         cycle_iter = j
                         if iter-cycle_iter == self.K:
                             print('\nNash equilibrium detected')
                         else:
                             print('\nCycle detected')
+                        #TODO: Get the score of the cycle
+                        score = self.getCycleAmplitude(p_history[cycle_iter:])
                         break
             # Update the data for the next iteration
             #TODO: Add the possibility select the specific order
@@ -139,15 +139,28 @@ class NashHeuristic(object):
             iter += 1
 
         # Update the tables
-        #
-        if cycle and (iter - 1)-cycle_iter == self.K:
-            self.updateTables(p_history, nash = 1)
-        elif cycle:
-            self.updateTables(p_history, nash = 0)
+        if cycle:
+            self.updateTables(p_history, length=(iter - 1) - cycle_iter, score=score)
         else:
             # Remove the last entry since we have already visited it
             del p_history[-1]
-            self.updateTables(p_history, nash = 0)
+            self.updateTables(p_history, length=len(p_history), score=np.inf)
+
+    def getCycleAmplitude(self, p_history):
+        ''' Compute the amplitude of the cycle. For each alternative, compute
+            the highest difference in prices in the cycle. The score of the cycle
+            is the sum of these differences
+            Args:
+                p_history          price history
+        '''
+        score = 0
+        for i in range(1, self.I + 1):
+            history = [price[i] for price in p_history]
+            p_min = min(history)
+            p_max = max(history)
+            score = p_max-p_min
+
+        return score
 
     def alreadyVisited(self, prices):
         ''' Check whether a given configuration has already been visited before.
@@ -166,7 +179,7 @@ class NashHeuristic(object):
                     reverse_index = math.floor(-lb + (price*step)/(ub-lb))
                     reverse_indices.append(reverse_index)
         if self.K == 2:
-            if self.tables[self.Optimizer - 1][reverse_indices[0]] in [0, 1]:
+            if self.tables[self.Optimizer - 1][reverse_indices[0]] >= 0:
                 print('The next configuration \n Optimizer: %r \n Prices: %r \n\
 has already been visited before.'%(self.Optimizer, prices))
                 return True
@@ -174,7 +187,7 @@ has already been visited before.'%(self.Optimizer, prices))
             raise NotImplementedError('To be implemented')
         return False
 
-    def updateTables(self, p_history, nash = 0):
+    def updateTables(self, p_history, length=0, score=np.inf):
         ''' Update the tables according to the prices history and whether
             a Nash equilibrium is found.
             Args:
@@ -213,13 +226,13 @@ has already been visited before.'%(self.Optimizer, prices))
                         if self.tables[self.initial_state[0] - 1][self.initial_state[1]] == -1:
                             not_found = False
                 # Update the table
-                if nash == 0:
-                    self.tables[current_oper - 1][reverse_indices[0]] = 0
+                if score == np.inf:
+                    self.tables[current_oper - 1][reverse_indices[0]] = np.inf
                 else:
-                    if len(p_history) - iter <= self.K:
-                        self.tables[current_oper - 1][reverse_indices[0]] = 1
+                    if len(p_history) - iter <= length:
+                        self.tables[current_oper - 1][reverse_indices[0]] = score
                     else:
-                        self.tables[current_oper - 1][reverse_indices[0]] = 0
+                        self.tables[current_oper - 1][reverse_indices[0]] = np.inf
             else:
                 raise NotImplementedError('To be implemented')
 
