@@ -539,8 +539,9 @@ def main(data):
     info['obj_val'] = -info['obj_val']
     # Print the solution
     printSolution(data, x, info)
-
-    return x[:data['I'] + 1]
+    choice_start = data['I'] + 1 + data['N']*(data['I'] + 1)
+    choice_end = data['I'] + 1 + 2*data['N']*(data['I'] + 1)
+    return x[:data['I'] + 1], x[choice_start:choice_end]
 
 def printSolution(data, x, info):
 
@@ -559,6 +560,7 @@ def printSolution(data, x, info):
             print('Utility of alternative %r for user %r : %r'%(i, n, x[counter]))
             counter += 1
     print('\n')
+    #TODO: Compute the revenue/market share
     # Choice variables
     for i in range(data['I'] + 1):
         for n in range(data['N']):
