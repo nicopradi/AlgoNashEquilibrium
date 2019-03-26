@@ -19,7 +19,7 @@ def getData():
     dict['lb_p'] = np.array([0, 0.0, 0.0]) # lower bound (FSP, PSP, PUP)
     dict['ub_p'] = np.array([0, 1.0, 1.0]) # upper bound (FSP, PSP, PUP)
 
-    dict['Capacity'] = np.array([60.0, 4.0, 4.0]) # Availability for each alternative (opt-out always available)
+    #dict['Capacity'] = np.array([60.0, 4.0, 4.0]) # Availability for each alternative (opt-out always available)
     # Choice set of the customers
     #	 		           n1 n2 n3...
     dict['ChoiceSet'] = np.array([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1],  # OPT-OUT

@@ -3,7 +3,7 @@
 # Then the sequential game is performed, starting from an initial unvisited configuration.
 # The algorithm stops when all the possible configurations () have been explored
 
-#TODO: Make the variables/method names consistent
+# TODO: Make the variables/method names consistent
 
 # General
 import sys
@@ -13,9 +13,9 @@ import math
 import random
 # Ipopt
 import ipopt
-# numpy
+# Numpy
 import numpy as np
-# data
+# Data
 import Data.Non_linear_Stackelberg.ProbLogit_n10 as data_file
 import non_linear_stackelberg
 
@@ -103,7 +103,7 @@ class NashHeuristic(object):
                     print('Initial price of alternative %r set by operator %r : %r'
                            %(index, self.Operator[index], p))
             # Run the game with the initial configuration
-            prices = non_linear_stackelberg.main(data)
+            prices, _ = non_linear_stackelberg.main(data)
             # Update the price history
             p_history[iter] = copy.deepcopy(prices)
             # Check for the cycle
@@ -271,18 +271,19 @@ has already been visited before.'%(self.Optimizer, prices))
             self.sequentialGame(data)
             run_number += 1
 
-            # Print the final results
-            print('\n--- FINAL RESULTS ---')
-            for (k, table) in enumerate(self.tables):
-                # The operator index starts at 1. 0 is opt-out
-                print('\nOptimizer %r' %(k + 1))
-                print('Prices \t\t Nash Equilibrium found\n')
-                for (p_range, value) in zip(self.mapping[k + 1], self.tables[k]):
-                    print('%r \t\t %r' %(list(p_range.values())[0], value))
+        # Print the final results
+        print('\n--- FINAL RESULTS ---')
+        for (k, table) in enumerate(self.tables):
+            # The operator index starts at 1. 0 is opt-out
+            print('\nOptimizer %r' %(k + 1))
+            print('Prices \t\t Nash Equilibrium found\n')
+            for (p_range, value) in zip(self.mapping[k + 1], self.tables[k]):
+                print('%r \t\t %r' %(list(p_range.values())[0], value))
 
 
 if __name__ == '__main__':
     # Get the data and preprocess
+    t_0 = time.time()
     data = data_file.getData()
     data_file.preprocess(data)
 
@@ -298,3 +299,5 @@ if __name__ == '__main__':
     game = NashHeuristic(**nash_dict)
     data.update(nash_dict)
     game.run(data)
+    t_1 = time.time()
+    print('TOTAL TIMING: %r' %(t_1 - t_0))

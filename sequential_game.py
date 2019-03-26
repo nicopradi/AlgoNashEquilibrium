@@ -152,9 +152,9 @@ class Sequential:
         ### Market share graph
         # Get the demand history for each operators
         market_history_1 = [market[1] for market in self.market_share if market[1] != -1]
-        #market_history_2 = [market[2] for market in self.market_share if market[2] != -1]
+        market_history_2 = [market[2] for market in self.market_share if market[2] != -1]
         # Plot them
-        #plt.plot(market_history_2, label='Operator 2 market share', color='blue')
+        plt.plot(market_history_2, label='Operator 2 market share', color='blue')
         plt.plot(market_history_1, label='Operator 1 market share', color='red')
         plt.ylabel('Market share')
         plt.title("Operator's market share as a function of the iteration number. \
@@ -165,35 +165,55 @@ class Sequential:
 
 
 if __name__ == '__main__':
-    '''
     # LINEAR
+    t_0 = time.time()
     stackelberg_dict = data_file.getData()
     data_file.preprocess(stackelberg_dict)
-
-    sequential_dict = {'K': 2,
-                    'Operator': [0, 1, 2],
-                    'maxIter': 50,
-                    'Optimizer': 2,
-                    'p_fixed': [0.0, 0.2, -1.0],
-                    'y_fixed': [1.0, 1.0, 1.0]}
-    sequential_game = Sequential(**sequential_dict)
-    # Update the dict with the attributes of the Stackelberg game
-    sequential_dict.update(stackelberg_dict)
-    sequential_game.run(sequential_dict, linearized=True)
-    sequential_game.plotGraphs(0.2)
-    '''
-    # NON LINEAR
-    stackelberg_dict = data_file_2.getData()
-    data_file_2.preprocess(stackelberg_dict)
-
+    t_1 = time.time()
     sequential_dict = {'K': 2,
                     'Operator': [0, 1, 2],
                     'maxIter': 50,
                     'Optimizer': 1,
-                    'p_fixed': [0.0, -1.0, 0.2],
+                    'p_fixed': [0.0, -1.0, 0.5],
+                    'y_fixed': [1.0, 1.0, 1.0]}
+    sequential_game = Sequential(**sequential_dict)
+    # Update the dict with the attributes of the Stackelberg game
+    sequential_dict.update(stackelberg_dict)
+    t_2 = time.time()
+    sequential_game.run(sequential_dict, linearized=True)
+    t_3 = time.time()
+    print('\n -- TIMING -- ')
+    print('Get data + Preprocess: %r sec' %(t_1 - t_0))
+    print('Update dictionary, initiate sequential game: %r sec' %(t_2 - t_1))
+    print('Run the game: %r sec' %(t_3 - t_2))
+    nb_iter = len([price[0] for price in sequential_game.p_history if price[0] != -1])
+    print('Total number of iterations: %r' %nb_iter)
+
+    print('n: %r and r: %r' %(sequential_dict['N'], sequential_dict['R']))
+    #sequential_game.plotGraphs(0.2)
+    '''
+    # NON LINEAR
+    t_0 = time.time()
+    stackelberg_dict = data_file_2.getData()
+    data_file_2.preprocess(stackelberg_dict)
+    t_1 = time.time()
+    sequential_dict = {'K': 2,
+                    'Operator': [0, 1, 2],
+                    'maxIter': 50,
+                    'Optimizer': 1,
+                    'p_fixed': [0.0, -1.0, 0.5],
                     'y_fixed': [1.0, 1.0, 1.0]}
     sequential_game = Sequential(**sequential_dict)
     # Update the dict with the attributes for the Stackelberg game
     sequential_dict.update(stackelberg_dict)
+    t_2 = time.time()
     sequential_game.run(sequential_dict, linearized=False)
+    t_3 = time.time()
+    print('\n -- TIMING -- ')
+    print('Get data + Preprocess: %r sec' %(t_1 - t_0))
+    print('Update dictionary, initiate sequential game: %r sec' %(t_2 - t_1))
+    print('Run the game: %r sec' %(t_3 - t_2))
+    nb_iter = len([price[0] for price in sequential_game.p_history if price[0] != -1])
+    print('Total number of iterations: %r' %nb_iter)
     sequential_game.plotGraphs(0.2)
+    '''

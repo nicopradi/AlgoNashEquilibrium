@@ -16,7 +16,7 @@ def getData():
     dict['N'] = 5
 
     # Number of draws
-    dict['R'] = 100
+    dict['R'] = 200
 
     # Lower and upper bound on prices
     dict['lb_p'] = np.array([0, 0.00, 0.00]) # lower bound (FSP, PSP, PUP)
