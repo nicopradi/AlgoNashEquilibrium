@@ -22,10 +22,10 @@ def getData():
     dict['lb_p'] = np.array([0, 0.00, 0.00]) # lower bound (FSP, PSP, PUP)
     dict['ub_p'] = np.array([0, 1.00, 1.00]) # upper bound (FSP, PSP, PUP)
 
-    #dict['Capacity'] = np.array([60.0, 4.0, 4.0]) # Availability for each alternative (opt-out always available)
+    dict['capacity'] = np.array([60.0, 4.0, 4.0]) # Availability for each alternative (opt-out always available)
     # Choice set of the customers
     #	 		           n1 n2 n3...
-    dict['ChoiceSet'] = np.array([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1],  # OPT-OUT
+    dict['choice_set'] = np.array([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1],  # OPT-OUT
                        			  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],  # PSP
                     	 		  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])  # PUP
 
@@ -1096,13 +1096,13 @@ def preprocess(dict):
         min = 1
         max = dict['N']
         for n in range(dict['N']):
-            if dict['ChoiceSet'][i, n] == 1:
+            if dict['choice_set'][i, n] == 1:
                 priority_list[i, n] = min
                 min += 1
             else:
                 priority_list[i, n] = max
                 min -= 1
-    dict['PriorityList'] = priority_list
+    dict['priority_list'] = priority_list
 
     # Exogene utility
     exo_utility = np.empty([dict['I'] + 1, dict['N']])
@@ -1124,7 +1124,7 @@ def preprocess(dict):
                                        dict['Beta_AT'] * dict['AT_PUP'] +
                                        dict['Beta_TD'] * dict['TD_PUP'] +
                                        dict['Beta_Age_Veh'] * dict['Age_veh'][n])
-    dict['ExoUtility'] = exo_utility
+    dict['exo_utility'] = exo_utility
 
     # Beta coefficient for endogenous variables
     beta_FEE_PSP = np.empty([dict['N']])
@@ -1136,7 +1136,7 @@ def preprocess(dict):
         beta_FEE_PUP[n] = (dict['Beta_FEE'] +
                              dict['Beta_FEE_INC_PUP'] * dict['Low_inc'][n] +
                              dict['Beta_FEE_RES_PUP'] * dict['Res'][n])
-    dict['EndoCoef'] = np.array([np.zeros([dict['N']]), beta_FEE_PSP, beta_FEE_PUP])
+    dict['endo_coef'] = np.array([np.zeros([dict['N']]), beta_FEE_PSP, beta_FEE_PUP])
 
     # Calculate bounds on the utility
     lb_U = np.empty([dict['I'] + 1, dict['N'], dict['R']])
@@ -1147,16 +1147,16 @@ def preprocess(dict):
     for n in range(dict['N']):
         for r in range(dict['R']):
             for i in range(dict['I'] + 1):
-                    if dict['EndoCoef'][i, n] > 0:
-                        lb_U[i, n, r] = (dict['EndoCoef'][i, n] * dict['lb_p'][i] +
-                                        dict['ExoUtility'][i, n] + dict['xi'][i, n, r])
-                        ub_U[i, n, r] = (dict['EndoCoef'][i, n] * dict['ub_p'][i] +
-                                        dict['ExoUtility'][i, n] + dict['xi'][i, n, r])
+                    if dict['endo_coef'][i, n] > 0:
+                        lb_U[i, n, r] = (dict['endo_coef'][i, n] * dict['lb_p'][i] +
+                                        dict['exo_utility'][i, n] + dict['xi'][i, n, r])
+                        ub_U[i, n, r] = (dict['endo_coef'][i, n] * dict['ub_p'][i] +
+                                        dict['exo_utility'][i, n] + dict['xi'][i, n, r])
                     else:
-                        lb_U[i, n, r] = (dict['EndoCoef'][i, n] * dict['ub_p'][i] +
-                                        dict['ExoUtility'][i, n] + dict['xi'][i, n, r])
-                        ub_U[i, n, r] = (dict['EndoCoef'][i, n] * dict['lb_p'][i] +
-                                        dict['ExoUtility'][i, n] + dict['xi'][i, n, r])
+                        lb_U[i, n, r] = (dict['endo_coef'][i, n] * dict['ub_p'][i] +
+                                        dict['exo_utility'][i, n] + dict['xi'][i, n, r])
+                        ub_U[i, n, r] = (dict['endo_coef'][i, n] * dict['lb_p'][i] +
+                                        dict['exo_utility'][i, n] + dict['xi'][i, n, r])
                     # Bound for each customer, for each draw
                     if lb_U[i, n, r] < lb_Umin[n, r]:
                         lb_Umin[n, r] = lb_U[i, n, r]
