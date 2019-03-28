@@ -18,16 +18,24 @@ def getData():
     # Number of draws
     dict['R'] = 50
 
+    # Number of operators
+    dict['K'] = 2
+
+    dict['operator'] = np.array([0, 1, 2])
+
     # Lower and upper bound on prices
-    dict['lb_p'] = np.array([0, 0.00, 0.00]) # lower bound (FSP, PSP, PUP)
-    dict['ub_p'] = np.array([0, 1.00, 1.00]) # upper bound (FSP, PSP, PUP)
+    dict['lb_p'] = np.array([0.00, 0.00, 0.00]) # lower bound (FSP, PSP, PUP)
+    dict['ub_p'] = np.array([0.00, 1.00, 1.00]) # upper bound (FSP, PSP, PUP)
+
+    dict['n_price_levels'] = 10
 
     dict['capacity'] = np.array([60.0, 20.0, 20.0]) # Availability for each alternative (opt-out always available)
+
     # Choice set of the customers
     #	 		           n1 n2 n3...
-    dict['choice_set'] = np.array([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1],  # OPT-OUT
-                       			  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],  # PSP
-                    	 		  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])  # PUP
+    dict['choice_set'] = np.array([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1], # Opt-out (FSP)
+                                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1], # PSP
+                                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])  # PUP
 
     # Parameters choice model
     dict['ASC_PSP'] = 32
@@ -572,6 +580,9 @@ def getData():
     dict['Low_inc'] = np.array([1, 1, 1, 1, 0, 1, 1, 1, 1, 0])
     dict['Res'] = np.array([1, 1, 1, 0, 1, 1, 0, 0, 1, 1])
 
+    # Big M value
+    dict['M_rev'] = 50.0
+
     return dict
 
 def preprocess(dict):
@@ -580,6 +591,7 @@ def preprocess(dict):
     '''
 
     ########## Precomputation ##########
+
     # Priority list
     priority_list = np.empty([dict['I'] + 1, dict['N']])
     for i in range(dict['I'] + 1):
@@ -593,6 +605,13 @@ def preprocess(dict):
                 priority_list[i, n] = max
                 min -= 1
     dict['priority_list'] = priority_list
+
+    # Generate prices
+    p = np.empty([dict['I'] + 1, dict['n_price_levels']])
+    for i in range(dict['I'] + 1):
+        for l in range(dict['n_price_levels']):
+            p[i, l] = dict['lb_p'][i] + (dict['ub_p'][i] - dict['lb_p'][i])*float(l)/dict['n_price_levels']
+    dict['p'] = p
 
     # Exogene utility
     exo_utility = np.empty([dict['I'] + 1, dict['N']])
@@ -659,7 +678,7 @@ def preprocess(dict):
     dict['ub_U'] = ub_U
     dict['lb_Umin'] = lb_Umin
     dict['ub_Umax'] = ub_Umax
-    dict['M'] = M
+    dict['M_U'] = M
 
 if __name__ == '__main__':
     dict = getData()

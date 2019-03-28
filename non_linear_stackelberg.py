@@ -19,29 +19,29 @@ class Stackelberg(object):
             KeywordArgs:
                 I               Number of alternatives
                 N               Number of customers
-                EndoCoef        Beta coefficient of the endogene variables
-                ExoUtility      Value of the utility for the exogene variables
+                endo_coef        Beta coefficient of the endogene variables
+                exo_utility      Value of the utility for the exogene variables
                 #### Optional kwargs ####
-                Optimizer       Index of the current operator
-                Operator        Mapping between alternative and operators
+                optimizer       Index of the current operator
+                operator        Mapping between alternative and operators
                 p_fixed         Fixed price of the alternatives managed by other operators
                 y_fixed         Fixed availability of the alternatives managed by other operators
-                Capacity        Capacity value for each alternative [list]
-                PriorityList    Priority list for each alternative
+                capacity        capacity value for each alternative [list]
+                priority_list    Priority list for each alternative
         '''
         # Keyword arguments
         self.I = kwargs.get('I')
         self.N = kwargs.get('N')
-        self.EndoCoef = kwargs.get('EndoCoef')
-        self.ExoUtility = kwargs.get('ExoUtility')
+        self.endo_coef = kwargs.get('endo_coef')
+        self.exo_utility = kwargs.get('exo_utility')
         # Optional keyword arguments
-        self.Optimizer = kwargs.get('Optimizer', None)
-        self.Operator = kwargs.get('Operator', None)
+        self.optimizer = kwargs.get('optimizer', None)
+        self.operator = kwargs.get('operator', None)
         self.p_fixed = kwargs.get('p_fixed', None)
         self.y_fixed = kwargs.get('y_fixed', None)
         # Optinal capacity constraints
-        self.Capacity = kwargs.get('Capacity', None)
-        self.PriorityList = kwargs.get('PriorityList', None)
+        self.capacity = kwargs.get('capacity', None)
+        self.priority_list = kwargs.get('priority_list', None)
 
         ### Mapping
         # Price variables
@@ -66,7 +66,7 @@ class Stackelberg(object):
                 current_index += 1
 
         # Capacity variables
-        if self.Capacity is not None:
+        if self.capacity is not None:
             # Availability variables
             self.y = np.empty([self.I + 1, self.N], dtype = int)
             for i in range(len(self.y)):
@@ -80,7 +80,7 @@ class Stackelberg(object):
         '''
         expression = 0.0
         for i in range(self.I + 1):
-            if (self.Optimizer is None) or (self.Operator[i] == self.Optimizer):
+            if (self.optimizer is None) or (self.operator[i] == self.optimizer):
                 for n in range(self.N):
                     # Note that this is a minimization problem.
                     expression += -(x[self.p[i]] * x[self.w[i, n]])
@@ -94,7 +94,7 @@ class Stackelberg(object):
         # Price variables
         for i in range(len(self.p)):
             expression = 0.0
-            if (self.Optimizer is None) or (self.Operator[i] == self.Optimizer):
+            if (self.optimizer is None) or (self.operator[i] == self.optimizer):
                 for n in range(len(self.w[i])):
                     #print ('index value : %r and type : %r '%(self.w[i, n], type(self.w[i, n])))
                     expression += -x[self.w[i, n]]
@@ -106,12 +106,12 @@ class Stackelberg(object):
         # Choice variables
         for i in range(len(self.w)):
             for n in range(len(self.w[i])):
-                if (self.Optimizer is None) or (self.Operator[i] == self.Optimizer):
+                if (self.optimizer is None) or (self.operator[i] == self.optimizer):
                     gradient.append(-x[self.p[i]])
                 else:
                     gradient.append(0.0)
         # Availability variables
-        if self.Capacity is not None:
+        if self.capacity is not None:
             for i in range(len(self.y)):
                 for n in range(len(self.y[i])):
                     gradient.append(0.0)
@@ -126,7 +126,7 @@ class Stackelberg(object):
         for i in range(len(self.w)):
             for n in range(len(self.w[i])):
                 expression = 0.0
-                if self.Capacity is not None:
+                if self.capacity is not None:
                     numerator = float(np.exp(x[self.U[i, n]]) * x[self.y[i, n]])
                     denominator = 0.0
                     for j in range(len(self.w)):
@@ -143,18 +143,18 @@ class Stackelberg(object):
         # Utility value
         for i in range(len(self.U)):
             for n in range(len(self.U[i])):
-                expression = x[self.U[i, n]] - self.EndoCoef[i, n] * x[self.p[i]] - self.ExoUtility[i, n]
+                expression = x[self.U[i, n]] - self.endo_coef[i, n] * x[self.p[i]] - self.exo_utility[i, n]
                 constraints.append(expression)
 
         # Fixed prices
-        if (self.Optimizer is not None):
+        if (self.optimizer is not None):
             for i in range(len(self.p)):
-                if self.Operator[i] != self.Optimizer:
+                if self.operator[i] != self.optimizer:
                     expression = x[self.p[i]] - self.p_fixed[i]
                     constraints.append(expression)
 
         # Capacity constraints
-        if self.Capacity is not None:
+        if self.capacity is not None:
             # Ensure that y is a binary variable
             for i in range(len(self.y)):
                 for n in range(len(self.y[0])):
@@ -169,24 +169,24 @@ class Stackelberg(object):
                 sum = 0
                 for n in range(self. N):
                     sum += x[self.w[i, n]]
-                expression = sum - self.Capacity[i]
+                expression = sum - self.capacity[i]
                 constraints.append(expression)
             # Priority list, if y is 0 then the max capacity is reached
             for i in range(1, self.I + 1):
                 for n in range(self.N):
-                    expression = self.Capacity[i]*(1.0 - x[self.y[i, n]])
+                    expression = self.capacity[i]*(1.0 - x[self.y[i, n]])
                     # Compute the number of customers with a higher priority which chose alternative i
-                    sum = np.sum([x[self.w[i, m]] for m in range(self.N) if self.PriorityList[i, m] < self.PriorityList[i, n]])
+                    sum = np.sum([x[self.w[i, m]] for m in range(self.N) if self.priority_list[i, m] < self.priority_list[i, n]])
                     expression += -sum
                     constraints.append(expression)
             # Priority list, if y is 1 then there is free room
             for i in range(1, self.I + 1):
                 for n in range(self.N):
                     # This type of constraint is revelant only if the capacity could be exceeded
-                    if self.PriorityList[i, n] > self.Capacity[i]:
+                    if self.priority_list[i, n] > self.capacity[i]:
                         # Compute the number of customers with a higher priority which chose alternative i
-                        sum = np.sum([x[self.w[i, m]] for m in range(self.N) if self.PriorityList[i, m] < self.PriorityList[i, n]])
-                        expression = sum - (self.Capacity[i] - 1)*x[self.y[i, n]] - (self.PriorityList[i, n] - 1)*(1 - x[self.y[i, n]])
+                        sum = np.sum([x[self.w[i, m]] for m in range(self.N) if self.priority_list[i, m] < self.priority_list[i, n]])
+                        expression = sum - (self.capacity[i] - 1)*x[self.y[i, n]] - (self.priority_list[i, n] - 1)*(1 - x[self.y[i, n]])
                         constraints.append(expression)
 
         return constraints
@@ -213,7 +213,7 @@ class Stackelberg(object):
                         if m != n:
                             expression = 0.0
                         elif i == j:
-                            if self.Capacity is None:
+                            if self.capacity is None:
                                 sum = 0
                                 # TODO: Put the sum in the outer loop to reduce running time, replace by np.sum
                                 for k in range(len(self.U)):
@@ -226,7 +226,7 @@ class Stackelberg(object):
                                 expression = -(np.exp(x[self.U[j, m]])*x[self.y[j, m]]*sum - (np.exp(x[self.U[j, m]])*x[self.y[j, m]])**2)/(sum**2)
                         else:
                             expression = 0.0
-                            if self.Capacity is None:
+                            if self.capacity is None:
                                 sum = 0
                                 for k in range(len(self.U)):
                                     sum += np.exp(x[self.U[k, m]])
@@ -245,7 +245,7 @@ class Stackelberg(object):
                         else:
                             jacobian.append(0.0)
                 # Availability variables
-                if self.Capacity is not None:
+                if self.capacity is not None:
                     for j in range(len(self.y)):
                         for m in range(len(self.y[j])):
                             if (j == i) and (n == m):
@@ -270,7 +270,7 @@ class Stackelberg(object):
                 # Price variables
                 for j in range(len(self.p)):
                     if j == i:
-                        jacobian.append(-self.EndoCoef[i, n])
+                        jacobian.append(-self.endo_coef[i, n])
                     else:
                         jacobian.append(0.0)
                 # Utility variables
@@ -285,15 +285,15 @@ class Stackelberg(object):
                     for m in range(len(self.w[j])):
                         jacobian.append(0.0)
                 # Availability variables
-                if self.Capacity is not None:
+                if self.capacity is not None:
                     for j in range(len(self.y)):
                         for m in range(len(self.y[j])):
                             jacobian.append(0.0)
 
         #### Fixed prices constraints
-        if (self.Optimizer is not None):
+        if (self.optimizer is not None):
             for i in range(len(self.p)):
-                if self.Operator[i] != self.Optimizer:
+                if self.operator[i] != self.optimizer:
                     # For each variable
                     # Price variables
                     for j in range(len(self.p)):
@@ -310,7 +310,7 @@ class Stackelberg(object):
                         for m in range(len(self.w[j])):
                             jacobian.append(0.0)
                     # Availability variables
-                    if self.Capacity is not None:
+                    if self.capacity is not None:
                         for j in range(len(self.y)):
                             for m in range(len(self.y[j])):
                                 jacobian.append(0.0)
@@ -360,7 +360,7 @@ class Stackelberg(object):
                             jacobian.append(1.0)
                         else:
                             jacobian.append(0.0)
-            #### Capacity is not exceeded
+            #### capacity is not exceeded
             for i in range(self.I + 1):
                 # For each variable
                 # Price variables
@@ -395,7 +395,7 @@ class Stackelberg(object):
                     # Choice variables
                     for j in range(len(self.w)):
                         for m in range(len(self.w[j])):
-                            if (j == i) and (self.PriorityList[i, m] < self.PriorityList[i, n]):
+                            if (j == i) and (self.priority_list[i, m] < self.priority_list[i, n]):
                                 jacobian.append(-1.0)
                             else:
                                 jacobian.append(0.0)
@@ -403,14 +403,14 @@ class Stackelberg(object):
                     for j in range(len(self.y)):
                         for m in range(len(self.y[j])):
                             if (j == i) and (m == n):
-                                jacobian.append(-self.Capacity[i])
+                                jacobian.append(-self.capacity[i])
                             else:
                                 jacobian.append(0.0)
             #### Priority list, if y[i, n] is 1 then there is free room for n to choose alternative i
             for i in range(1, self.I + 1):
                 for n in range(self.N):
                     # This type of constraint is revelant only if the capacity could be exceeded
-                    if self.PriorityList[i, n] > self.Capacity[i]:
+                    if self.priority_list[i, n] > self.capacity[i]:
                         # For each variable
                         # Price variables
                         for j in range(len(self.p)):
@@ -422,7 +422,7 @@ class Stackelberg(object):
                         # Choice variables
                         for j in range(len(self.w)):
                             for m in range(len(self.w[j])):
-                                if (j == i) and (self.PriorityList[i, m] < self.PriorityList[i, n]):
+                                if (j == i) and (self.priority_list[i, m] < self.priority_list[i, n]):
                                     jacobian.append(1.0)
                                 else:
                                     jacobian.append(0.0)
@@ -430,7 +430,7 @@ class Stackelberg(object):
                         for j in range(len(self.y)):
                             for m in range(len(self.y[j])):
                                 if (j == i) and (m == n):
-                                    jacobian.append(-self.Capacity[i] + self.PriorityList[i, n])
+                                    jacobian.append(-self.capacity[i] + self.priority_list[i, n])
                                 else:
                                     jacobian.append(0.0)
 
@@ -465,7 +465,7 @@ def main(data):
             lb.append(0.0)
             ub.append(1.0)
     # Capacity variables
-    if 'Capacity' in data.keys():
+    if 'capacity' in data.keys():
         for i in range(data['I'] + 1):
             for n in range(data['N']):
                 x0.append(1.0)
@@ -487,13 +487,13 @@ def main(data):
             cl.append(-1e-6)
             cu.append(1e-6)
     # Fixed prices constraints
-    if 'Optimizer' in data.keys():
+    if 'optimizer' in data.keys():
         for i in range(data['I'] + 1):
-            if data['Operator'][i] != data['Optimizer']:
+            if data['operator'][i] != data['optimizer']:
                 cl.append(-1e-6)
                 cu.append(1e-6)
-    # Capacity constraints
-    if 'Capacity' in data.keys():
+    # capacity constraints
+    if 'capacity' in data.keys():
         # Ensure that y is a binary variable
         for i in range(data['I'] + 1):
             for n in range(data['N']):
@@ -505,7 +505,7 @@ def main(data):
             cu.append(1.0 + 1e-6)
         # Capacity is not exceeded
         for i in range(data['I'] + 1):
-            cl.append(-data['Capacity'][i] - 1e-6)
+            cl.append(-data['capacity'][i] - 1e-6)
             cu.append(1e-6)
         # Priority list, if y is 0 then the max capacity is reached
         for i in range(1, data['I'] + 1):
@@ -516,7 +516,7 @@ def main(data):
         for i in range(1, data['I'] + 1):
             for n in range(data['N']):
                 # This type of constraint is revelant only if the capacity could be exceeded
-                if data['PriorityList'][i, n] > data['Capacity'][i]:
+                if data['priority_list'][i, n] > data['capacity'][i]:
                     cl.append(-data['N'])
                     cu.append(1e-6)
 
@@ -568,7 +568,7 @@ def printSolution(data, x, info):
             counter += 1
     print('\n')
     # Availability variables
-    if 'Capacity' in data.keys():
+    if 'capacity' in data.keys():
         for i in range(data['I'] + 1):
             for n in range(data['N']):
                 print('Availability of alternative %r for user %r : %r'%(i, n, x[counter]))

@@ -23,24 +23,23 @@ class Sequential:
         ''' Construct a sequential game.
             KeywordArgs:
                 K          Number of operators
-                Operator   Mapping between alternatives and operators
-                maxIter    Maximum number of iterations
-                Optimizer  Current operator index
+                operator   Mapping between alternatives and operators
+                max_iter    Maximum number of iterations
+                optimizer  Current operator index
                 p_fixed    Current prices of the other operator's alternatives
                 p_fixed    Current availabilty of the other operator's alternatives
         '''
         self.K = kwargs.get('K', 1)
-        self.Operator = kwargs.get('Operator', np.full((1, self.K + 1), 1))
-        self.maxIter = kwargs.get('maxIter', 10)
-        self.Optimizer = kwargs.get('Optimizer', 1)
-        self.p_fixed = kwargs.get('p_fixed', np.full((1, len(self.Operator)), 1.0))
-        self.y_fixed = kwargs.get('y_fixed', np.full((1, len(self.Operator)), 1.0))
-        self.p_history = np.full((self.maxIter, len(self.Operator)), -1.0)
-        self.revenue = np.full((self.maxIter, self.K + 1), -1.0)
-        self.market_share = np.full((self.maxIter, len(self.Operator)), -1.0)
-        # Make a copy of the initial optimizer
-        self.InitialOptimizer = self.Optimizer
-        self.InitialPrice = copy.deepcopy(self.p_fixed)
+        self.operator = kwargs.get('operator', np.full((1, self.K + 1), 1))
+        self.max_iter = kwargs.get('max_iter', 10)
+        self.optimizer = kwargs.get('optimizer', 1)
+        self.p_fixed = kwargs.get('p_fixed', np.full((1, len(self.operator)), 1.0))
+        self.y_fixed = kwargs.get('y_fixed', np.full((1, len(self.operator)), 1.0))
+        self.p_history = np.full((self.max_iter, len(self.operator)), -1.0)
+        self.revenue = np.full((self.max_iter, self.K + 1), -1.0)
+        self.market_share = np.full((self.max_iter, len(self.operator)), -1.0)
+        # Make a copy of the initial prices
+        self.initial_price = copy.deepcopy(self.p_fixed)
 
     def run(self, data, linearized=True):
         ''' Run the sequential game with the Stackelberg game
@@ -50,12 +49,12 @@ class Sequential:
         iter = 0
         cycle = False
         cycle_iter = 0
-        while (iter < self.maxIter) and cycle is False:
+        while (iter < self.max_iter) and cycle is False:
             print('\n--- ITERATION %r ----' %iter)
             for (index, p) in enumerate(self.p_fixed):
                 if p != -1.0:
                     print('The operator %r fixed the price of alternative %r to %r'
-                           %(self.Operator[index], index, p))
+                           %(self.operator[index], index, p))
             # Run the game for the current optimizer
             if linearized is True:
                 sub_game = stackelberg_game.Stackelberg(**data)
@@ -63,25 +62,25 @@ class Sequential:
                 model = sub_game.solveModel(model)
                 prices = []
                 demand = []
-                for i in range(len(self.Operator)):
+                for i in range(len(self.operator)):
                     prices.append(model.solution.get_values('p[' + str(i) + ']'))
                     demand.append(model.solution.get_values('d[' + str(i) + ']'))
             else:
                 prices, choice = non_linear_stackelberg.main(data)
                 demand = []
-                for i in range(len(self.Operator)):
+                for i in range(len(self.operator)):
                     demand.append(np.sum([customer for customer in choice[i*data['N']:(i+1)*data['N']]]))
             # Update the price history
-            for i in range(len(self.Operator)):
+            for i in range(len(self.operator)):
                 self.p_history[iter, i] = prices[i]
             # Update the revenue history
             for k in range(self.K + 1):
                 self.revenue[iter][k] = 0.0
-                alternatives = [i for i in range(len(self.Operator)) if self.Operator[i] == k]
+                alternatives = [i for i in range(len(self.operator)) if self.operator[i] == k]
                 for i in alternatives:
                     self.revenue[iter][k] += demand[i]*prices[i]
             # Update the market share history
-            for i in range(len(self.Operator)):
+            for i in range(len(self.operator)):
                 self.market_share[iter, i] = float(demand[i])/data['N']
 
             # Check for the cycle
@@ -90,7 +89,7 @@ class Sequential:
                 print('ITERATION TO CHECK: %r' %list(iteration_to_check))
                 for j in iteration_to_check:
                     cycle = True
-                    for i in range(len(self.Operator)):
+                    for i in range(len(self.operator)):
                         # TODO: Numerical error ? Tolerance 1e-6
                         if abs(self.p_history[j, i] - self.p_history[iter, i]) > 1e-4:
                             cycle = False
@@ -102,13 +101,13 @@ class Sequential:
                             print('\nCycle detected')
                         break
             # Update the data for the next iteration
-            data['Optimizer'] = ((data['Optimizer']) % self.K) + 1
-            self.Optimizer = data['Optimizer']
+            data['optimizer'] = ((data['optimizer']) % self.K) + 1
+            self.optimizer = data['optimizer']
             # Fix the price of the operators exept for the next optimizer
             data['p_fixed'] = copy.deepcopy(self.p_history[iter])
             self.p_fixed = copy.deepcopy(self.p_history[iter])
-            for (i, k) in enumerate(self.Operator):
-                if k == data['Optimizer']:
+            for (i, k) in enumerate(self.operator):
+                if k == data['optimizer']:
                     data['p_fixed'][i] = -1.0
                     self.p_fixed[i] = -1.0
             # Go to the next iteration
@@ -130,7 +129,7 @@ class Sequential:
         plt.plot(p_history_1, label='Operator 1 price', color='red')
         plt.ylabel('Price')
         plt.title("Operator's prices as a function of the iteration number. \
-        \n The initial prices are: Operator 1: %r and Operator 2: %r" %(self.InitialPrice[1], self.InitialPrice[2]))
+        \n The initial prices are: Operator 1: %r and Operator 2: %r" %(self.initial_price[1], self.initial_price[2]))
         plt.legend()
         plt.savefig('price_history_%r.png' %(title))
         plt.close()
@@ -144,7 +143,7 @@ class Sequential:
         plt.plot(revenue_history_1, label='Operator 1 revenue', color='red')
         plt.ylabel('Revenue')
         plt.title("Operator's revenue as a function of the iteration number. \
-        \n The initial prices are: Operator 1: %r and Operator 2: %r" %(self.InitialPrice[1], self.InitialPrice[2]))
+        \n The initial prices are: Operator 1: %r and Operator 2: %r" %(self.initial_price[1], self.initial_price[2]))
         plt.legend()
         plt.savefig('revenue_history_%r.png' %(title))
         plt.close()
@@ -158,7 +157,7 @@ class Sequential:
         plt.plot(market_history_1, label='Operator 1 market share', color='red')
         plt.ylabel('Market share')
         plt.title("Operator's market share as a function of the iteration number. \
-        \n The initial prices are: Operator 1: %r and Operator 2: %r" %(self.InitialPrice[1], self.InitialPrice[2]))
+        \n The initial prices are: Operator 1: %r and Operator 2: %r" %(self.initial_price[1], self.initial_price[2]))
         plt.legend()
         plt.savefig('market_history_%r.png' %(title))
         plt.close()
@@ -171,10 +170,10 @@ if __name__ == '__main__':
     data_file.preprocess(stackelberg_dict)
     t_1 = time.time()
     sequential_dict = {'K': 2,
-                    'Operator': [0, 1, 2],
-                    'maxIter': 50,
-                    'Optimizer': 1,
-                    'p_fixed': [0.0, -1.0, 0.5],
+                    'operator': [0, 1, 2],
+                    'max_iter': 50,
+                    'optimizer': 1,
+                    'p_fixed': [0.0, -1.0, 0.805],
                     'y_fixed': [1.0, 1.0, 1.0]}
     sequential_game = Sequential(**sequential_dict)
     # Update the dict with the attributes of the Stackelberg game
@@ -190,6 +189,7 @@ if __name__ == '__main__':
     print('Total number of iterations: %r' %nb_iter)
 
     print('n: %r and r: %r' %(sequential_dict['N'], sequential_dict['R']))
+    sequential_game.plotGraphs('test')
     #sequential_game.plotGraphs(0.2)
     '''
     # NON LINEAR
@@ -198,9 +198,9 @@ if __name__ == '__main__':
     data_file_2.preprocess(stackelberg_dict)
     t_1 = time.time()
     sequential_dict = {'K': 2,
-                    'Operator': [0, 1, 2],
-                    'maxIter': 50,
-                    'Optimizer': 1,
+                    'operator': [0, 1, 2],
+                    'max_iter': 50,
+                    'optimizer': 1,
                     'p_fixed': [0.0, -1.0, 0.5],
                     'y_fixed': [1.0, 1.0, 1.0]}
     sequential_game = Sequential(**sequential_dict)

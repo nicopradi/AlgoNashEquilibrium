@@ -19,9 +19,9 @@ class Stackelberg:
                 I               Number of alternatives
                 N               Number of customers
                 R               Number of draws
-                ChoiceSet       Individual choice sets
-                Capacity        Maximum capacity for each alternative
-                PriorityList    Priority list for each alternative
+                choice_set       Individual choice sets
+                capacity        Maximum capacity for each alternative
+                priority_list    Priority list for each alternative
                 lb_p            Lower bound on price for each alternatives
                 ub_p            Upper bound on price for each alternatives
                 lb_U            Lower bound on utility for each alternative and customer
@@ -29,12 +29,12 @@ class Stackelberg:
                 lb_Umin         Lower bound on utility for each customer
                 ub_Umax         Upper bound on utility for each customer
                 M               Big M value for each customer
-                ExoUtility      Value of the utility for the exogene variables
-                EndoCoef        Beta coefficient of the endogene variables
+                exo_utility      Value of the utility for the exogene variables
+                endo_coef        Beta coefficient of the endogene variables
                 xi              Error term values
                 #### Optional kwargs ####
-                Operator        Mapping between alternative and operators
-                Optimizer       Index of the current operator
+                operator        Mapping between alternative and operators
+                optimizer       Index of the current operator
                 p_fixed         Fixed price of the alternatives managed by other operators
                 y_fixed         Fixed availability of the alternatives managed by other operators
 
@@ -44,9 +44,9 @@ class Stackelberg:
         self.I = kwargs.get('I', 2)
         self.N = kwargs.get('N', 10)
         self.R = kwargs.get('R', 50)
-        self.ChoiceSet = kwargs.get('ChoiceSet', None)
-        self.Capacity = kwargs.get('Capacity', None)
-        self.PriorityList = kwargs.get('PriorityList', None)
+        self.choice_set = kwargs.get('choice_set', None)
+        self.capacity = kwargs.get('capacity', None)
+        self.priority_list = kwargs.get('priority_list', None)
         self.lb_p = kwargs.get('lb_p', np.zeros(self.I + 1))
         self.ub_p = kwargs.get('ub_p', np.zeros(self.I + 1))
         self.lb_U = kwargs.get('lb_U')
@@ -54,12 +54,12 @@ class Stackelberg:
         self.lb_Umin = kwargs.get('lb_Umin')
         self.ub_Umax = kwargs.get('ub_Umax')
         self.M = kwargs.get('M')
-        self.ExoUtility = kwargs.get('ExoUtility')
-        self.EndoCoef = kwargs.get('EndoCoef')
+        self.exo_utility = kwargs.get('exo_utility')
+        self.endo_coef = kwargs.get('endo_coef')
         self.xi = kwargs.get('xi')
         # Optinal keyword arguments
-        self.Operator = kwargs.get('Operator', None)
-        self.Optimizer = kwargs.get('Optimizer', None)
+        self.operator = kwargs.get('operator', None)
+        self.optimizer = kwargs.get('optimizer', None)
         self.p_fixed = kwargs.get('p_fixed', None)
         self.y_fixed = kwargs.get('y_fixed', None)
 
@@ -127,7 +127,7 @@ class Stackelberg:
         for i in range(self.I + 1):
             for n in range(self.N):
                 for r in range(self.R):
-                    if (i > 0) and ((self.Optimizer is None) or (self.Operator[i] == self.Optimizer)):
+                    if (i > 0) and ((self.optimizer is None) or (self.operator[i] == self.optimizer)):
                         model.variables.add(obj = [1.0/self.R], types = [model.variables.type.continuous],
                                             lb = [-cplex.infinity], ub = [cplex.infinity],
                                             names = ['alpha[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']'])
@@ -149,7 +149,7 @@ class Stackelberg:
         # The price/availability of the alternatives not managed by the current optimizer are fixed
         if self.p_fixed is not None:
             for i in range(self.I + 1):
-                if (i > 0) and (self.Operator[i] != self.Optimizer):
+                if (i > 0) and (self.operator[i] != self.optimizer):
                     indices = ['p[' + str(i) + ']']
                     coefs = [1.0]
                     model.linear_constraints.add(lin_expr = [[indices, coefs]],
@@ -205,12 +205,12 @@ class Stackelberg:
                                              senses = 'E',
                                              rhs = [1.0])
 
-        # Alternative not available at scnerio level if not included in the ChoiceSet
-        if self.ChoiceSet is not None:
+        # Alternative not available at scnerio level if not included in the choice_set
+        if self.choice_set is not None:
             for i in range(self.I + 1):
                 for n in range(self.N):
                     for r in range(self.R):
-                        if self.ChoiceSet[i, n] == 0:
+                        if self.choice_set[i, n] == 0:
                             indices = ['y_scen[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
                             coefs = [1.0]
                             model.linear_constraints.add(lin_expr = [[indices, coefs]],
@@ -218,7 +218,7 @@ class Stackelberg:
                                                          rhs = [0.0])
 
         ##### Capacity constraints
-        if self.Capacity is not None:
+        if self.capacity is not None:
             for i in range(1, self.I + 1): # Do not consider opt-out
                 for r in range(self.R):
                     indices = []
@@ -228,7 +228,7 @@ class Stackelberg:
                         coefs.append(1.0)
                     model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                                  senses = 'L',
-                                                 rhs = [self.Capacity[i]])
+                                                 rhs = [self.capacity[i]])
 
             # Priority list: if alternative not available at scenario level,
             # then the capacity is reached, or the alternative is not available in the choice set
@@ -239,13 +239,13 @@ class Stackelberg:
                         coefs = []
                         # Sum of the customers which have priority
                         for m in range(self.N):
-                            if self.PriorityList[i, m] < self.PriorityList[i, n]:
+                            if self.priority_list[i, m] < self.priority_list[i, n]:
                                 indices.append('w[' + str(i) + ']' + '[' + str(m) + ']' + '[' + str(r) + ']')
                                 coefs.append(-1.0)
                         indices.append('y[' + str(i) + ']')
-                        coefs.append(self.Capacity[i]*self.ChoiceSet[i, n])
+                        coefs.append(self.capacity[i]*self.choice_set[i, n])
                         indices.append('y_scen[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']')
-                        coefs.append(-self.Capacity[i]*self.ChoiceSet[i, n])
+                        coefs.append(-self.capacity[i]*self.choice_set[i, n])
                         # Add the constraint
                         model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                                      senses = 'L',
@@ -256,21 +256,21 @@ class Stackelberg:
             for i in range(1, self.I + 1): # Do not consider opt-out
                 for r in range(self.R):
                     for n in range(self.N):
-                        if (self.PriorityList[i, n] > self.Capacity[i]) and \
-                           (self.ChoiceSet[i, n] == 1):
+                        if (self.priority_list[i, n] > self.capacity[i]) and \
+                           (self.choice_set[i, n] == 1):
                            indices = []
                            coefs = []
                            # Sum of the customers which have priority
                            for m in range(self.N):
-                               if self.PriorityList[i, m] < self.PriorityList[i, n]:
+                               if self.priority_list[i, m] < self.priority_list[i, n]:
                                    indices.append('w[' + str(i) + ']' + '[' + str(m) + ']' + '[' + str(r) + ']')
                                    coefs.append(1.0)
                            indices.append('y_scen[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']')
-                           coefs.append(-self.Capacity[i] + self.PriorityList[i, n])
+                           coefs.append(-self.capacity[i] + self.priority_list[i, n])
                            # Add the constraint
                            model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                                         senses = 'L',
-                                                        rhs = [self.PriorityList[i, n] - 1.0])
+                                                        rhs = [self.priority_list[i, n] - 1.0])
         #### Price-choice constraints
 
         # Bound on price for each alternatives
@@ -331,13 +331,13 @@ class Stackelberg:
                 for r in range(self.R):
                     indices = ['U[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
                                'p[' + str(i) + ']']
-                    coefs = [1.0, -self.EndoCoef[i, n]]
+                    coefs = [1.0, -self.endo_coef[i, n]]
                     model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                                  senses = 'E',
-                                                 rhs = [self.ExoUtility[i, n] + self.xi[i, n, r]])
+                                                 rhs = [self.exo_utility[i, n] + self.xi[i, n, r]])
 
         #### Discounted utility function
-        if self.Capacity is not None:
+        if self.capacity is not None:
             for i in range(self.I + 1):
                 for n in range(self.N):
                     for r in range(self.R):

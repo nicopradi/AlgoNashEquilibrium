@@ -16,28 +16,27 @@ import ipopt
 # Numpy
 import numpy as np
 # Data
-import Data.Non_linear_Stackelberg.ProbLogit_n10 as data_file
+import Data.Non_linear_Stackelberg.ProbLogit_n50 as data_file
 import non_linear_stackelberg
 
 class NashHeuristic(object):
     def __init__(self, **kwargs):
         ''' Construct a Nash Heuristic game.
             KeywordArgs:
-                K                Number of operators
-                I                Number of alternatives
-                Operator         Mapping between alternatives and operators
-                InitialOptimizer Index of the operator who started the run
-                EndoVar          Mapping between alternatives and corresponding endogene variables
+                K                  Number of operators
+                I                  Number of alternatives
+                operator           Mapping between alternatives and operators
+                endo_var            Mapping between alternatives and corresponding endogene variables
         '''
         self.K = kwargs.get('K')
         self.I = kwargs.get('I')
         # TODO: For the moment, suppose that an operator is in charge of exactly one alternative
-        self.Operator = kwargs.get('Operator')
-        self.Optimizer = 1
+        self.operator = kwargs.get('operator')
+        self.optimizer = 1
         # Copy the initial optimizer
-        self.InitialOptimizer = self.Optimizer
-        # TODO: For the moment, suppose EndoVar contains only the price
-        self.EndoVar = kwargs.get('EndoVar')
+        self.initial_optimizer = self.optimizer
+        # TODO: For the moment, suppose endo_var contains only the price
+        self.endo_var = kwargs.get('endo_var')
         # Mapping between an integer and a specific strategy
         self.mapping = [[] for n in range(self.K + 1)]
 
@@ -47,9 +46,9 @@ class NashHeuristic(object):
         '''
         for k in range(1, self.K + 1):
             for i in range(1, self.I + 1):
-                if self.Operator[i] == k:
+                if self.operator[i] == k:
                     # Get the endogenous variables corresponding to the alternative
-                    vars = self.EndoVar[i]
+                    vars = self.endo_var[i]
                     for key in vars.keys():
                         var = vars[key]
                         if var['domain'] == 'C':
@@ -97,11 +96,11 @@ class NashHeuristic(object):
             # Initialize the future price history list for the current iteration
             p_history.append([])
             print('--- ITERATION %r ----\n' %iter)
-            print('Optimizer: %r' %self.Optimizer)
+            print('Optimizer: %r' %self.optimizer)
             for (index, p) in enumerate(data['p_fixed']):
                 if p != -1.0:
                     print('Initial price of alternative %r set by operator %r : %r'
-                           %(index, self.Operator[index], p))
+                           %(index, self.operator[index], p))
             # Run the game with the initial configuration
             prices, _ = non_linear_stackelberg.main(data)
             # Update the price history
@@ -126,14 +125,14 @@ class NashHeuristic(object):
                         break
             # Update the data for the next iteration
             #TODO: Add the possibility select the specific order
-            data['Optimizer'] = (data['Optimizer'] % self.K) + 1
-            self.Optimizer = data['Optimizer']
+            data['optimizer'] = (data['optimizer'] % self.K) + 1
+            self.optimizer = data['optimizer']
             # Check if the next configuration has already been visited
             visited = self.alreadyVisited(prices)
             # Change the fixed price of the operators except for the next optimizer
             data['p_fixed'] = copy.deepcopy(prices)
-            for (i, k) in enumerate(self.Operator):
-                if k == data['Optimizer']:
+            for (i, k) in enumerate(self.operator):
+                if k == data['optimizer']:
                     data['p_fixed'][i] = -1.0
             # Go to the next iteration
             iter += 1
@@ -171,17 +170,17 @@ class NashHeuristic(object):
         reverse_indices = []
         for k in range(1, self.K + 1):
             for i, price in enumerate(prices):
-                if i > 0 and self.Operator[i] == k and self.Operator[i] != self.Optimizer:
-                    lb = self.EndoVar[i]['p']['lb']
-                    ub = self.EndoVar[i]['p']['ub']
-                    step = self.EndoVar[i]['p']['step']
+                if i > 0 and self.operator[i] == k and self.operator[i] != self.optimizer:
+                    lb = self.endo_var[i]['p']['lb']
+                    ub = self.endo_var[i]['p']['ub']
+                    step = self.endo_var[i]['p']['step']
                     # reverse_index contains the strategy index
                     reverse_index = math.floor(-lb + (price*step)/(ub-lb))
                     reverse_indices.append(reverse_index)
         if self.K == 2:
-            if self.tables[self.Optimizer - 1][reverse_indices[0]] >= 0:
+            if self.tables[self.optimizer - 1][reverse_indices[0]] >= 0:
                 print('The next configuration \n Optimizer: %r \n Prices: %r \n\
-has already been visited before.'%(self.Optimizer, prices))
+has already been visited before.'%(self.optimizer, prices))
                 return True
         else:
             raise NotImplementedError('To be implemented')
@@ -195,16 +194,16 @@ has already been visited before.'%(self.Optimizer, prices))
                 nash               1 if a nash equilibrium has been found, 0 ow.
         '''
         print('\n- Update the tables -')
-        current_oper = self.InitialOptimizer
+        current_oper = self.initial_optimizer
         for (iter, prices) in enumerate(p_history):
             # Get the strategy indices for the current operators's strategy defined by prices
             reverse_indices = []
             for k in range(1, self.K + 1):
                 for (i, price) in enumerate(prices):
-                    if i > 0 and self.Operator[i] == k and self.Operator[i] != current_oper:
-                        lb = self.EndoVar[i]['p']['lb']
-                        ub = self.EndoVar[i]['p']['ub']
-                        step = self.EndoVar[i]['p']['step']
+                    if i > 0 and self.operator[i] == k and self.operator[i] != current_oper:
+                        lb = self.endo_var[i]['p']['lb']
+                        ub = self.endo_var[i]['p']['ub']
+                        step = self.endo_var[i]['p']['step']
                         reverse_index = math.floor(-lb + (price*step)/(ub-lb))
                         reverse_indices.append(reverse_index)
             if self.K == 2:
@@ -243,26 +242,26 @@ has already been visited before.'%(self.Optimizer, prices))
         self.constructMapping()
         self.constructTables()
         # Initialize the initial state of the sequential game
-        self.initial_state = [self.InitialOptimizer, 0]
+        self.initial_state = [self.initial_optimizer, 0]
         run_number = 1
         # While the tables are not fully filled
         while self.initial_state[0] <= self.K:
             print ('\n--- RUN %r ----' %run_number)
             # Update the optimizer index
-            self.InitialOptimizer = self.initial_state[0]
-            data['Optimizer'] = self.initial_state[0]
-            self.Optimizer = self.initial_state[0]
+            self.initial_optimizer = self.initial_state[0]
+            data['optimizer'] = self.initial_state[0]
+            self.optimizer = self.initial_state[0]
             # Compute the initial fixed prices to the corresponding initial state
             p_fixed = []
             for i in range(self.I + 1):
                 if i == 0:
                     p_fixed.append(0.0)
-                elif self.Operator[i] == self.initial_state[0]:
+                elif self.operator[i] == self.initial_state[0]:
                     p_fixed.append(-1.0)
                 else:
-                    lb = self.EndoVar[i]['p']['lb']
-                    ub = self.EndoVar[i]['p']['ub']
-                    step = self.EndoVar[i]['p']['step']
+                    lb = self.endo_var[i]['p']['lb']
+                    ub = self.endo_var[i]['p']['ub']
+                    step = self.endo_var[i]['p']['step']
                     p_fixed.append(random.uniform(lb + self.initial_state[1]*(ub-lb)/step,
                                                   lb + (self.initial_state[1] + 1)*(ub-lb)/step))
 
@@ -289,9 +288,9 @@ if __name__ == '__main__':
 
     nash_dict = {'K': 2,
                 'I': 2,
-                'Operator': [0, 1, 2],
-                'Optimizer': 1,
-                'EndoVar': {0:{'p':{'domain': 'C', 'lb': 0.0, 'ub': 0.0, 'step':1}},
+                'operator': [0, 1, 2],
+                'optimizer': 1,
+                'endo_var': {0:{'p':{'domain': 'C', 'lb': 0.0, 'ub': 0.0, 'step':1}},
                             1:{'p':{'domain': 'C', 'lb': 0.0, 'ub': 1.0, 'step':100}},
                             2:{'p':{'domain': 'C', 'lb': 0.0, 'ub': 1.0, 'step':100}}}
                 }
