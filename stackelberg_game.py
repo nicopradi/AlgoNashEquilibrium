@@ -436,9 +436,6 @@ class Stackelberg:
         except CplexSolverError as e:
             print('Exception raised during dual of restricted problem')
 
-
-        solution.get_values([0, 4, 5])
-
 if __name__ == '__main__':
     # Get the data and preprocess
     dict = data_file.getData()

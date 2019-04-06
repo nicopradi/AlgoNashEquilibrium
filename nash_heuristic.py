@@ -11,12 +11,13 @@ import time
 import copy
 import math
 import random
+import warnings
 # Ipopt
 import ipopt
 # Numpy
 import numpy as np
 # Data
-import Data.Non_linear_Stackelberg.ProbLogit_n50 as data_file
+import Data.Non_linear_Stackelberg.ProbLogit_n10 as data_file
 import non_linear_stackelberg
 
 class NashHeuristic(object):
@@ -39,6 +40,10 @@ class NashHeuristic(object):
         self.endo_var = kwargs.get('endo_var')
         # Mapping between an integer and a specific strategy
         self.mapping = [[] for n in range(self.K + 1)]
+        # Seed
+        self.seed = kwargs.get('seed', None)
+        if self.seed is not None:
+            random.seed(self.seed)
 
     def constructMapping(self):
         ''' For each operator, construct a mapping between its strategies set and
@@ -77,7 +82,7 @@ class NashHeuristic(object):
         for k in range(1, self.K + 1):
             # Get the size of the strategy set for each operator, except the current one
             table_dim = [len(self.mapping[l]) for l in range(1, self.K + 1) if l != k]
-            table = np.full(table_dim, -1)
+            table = np.full(table_dim, -1.0)
             self.tables.append(table)
 
     def sequentialGame(self, data):
@@ -102,7 +107,7 @@ class NashHeuristic(object):
                     print('Initial price of alternative %r set by operator %r : %r'
                            %(index, self.operator[index], p))
             # Run the game with the initial configuration
-            prices, _ = non_linear_stackelberg.main(data)
+            prices, _, x0, status, status_msg = non_linear_stackelberg.main(data)
             # Update the price history
             p_history[iter] = copy.deepcopy(prices)
             # Check for the cycle
@@ -122,6 +127,7 @@ class NashHeuristic(object):
                             print('\nCycle detected')
                         #TODO: Get the score of the cycle
                         score = self.getCycleAmplitude(p_history[cycle_iter:])
+                        print('SCORE: %r' %score)
                         break
             # Update the data for the next iteration
             #TODO: Add the possibility select the specific order
@@ -131,6 +137,11 @@ class NashHeuristic(object):
             visited = self.alreadyVisited(prices)
             # Change the fixed price of the operators except for the next optimizer
             data['p_fixed'] = copy.deepcopy(prices)
+            # Pass the current operator's strategy as the strating point in the next interation
+            print('STATUS %r : %r' %(status, status_msg))
+            if status not in [-2, -1, 2]:
+                data['x0'] = copy.deepcopy(x0)
+
             for (i, k) in enumerate(self.operator):
                 if k == data['optimizer']:
                     data['p_fixed'][i] = -1.0
@@ -268,6 +279,9 @@ has already been visited before.'%(self.optimizer, prices))
             data['p_fixed'] = copy.deepcopy(np.asarray(p_fixed))
             # Run the sequential game
             self.sequentialGame(data)
+            # Remove the previous solution for the next run
+            if 'x0' in data.keys():
+                del data['x0']
             run_number += 1
 
         # Print the final results
@@ -282,17 +296,20 @@ has already been visited before.'%(self.optimizer, prices))
 
 if __name__ == '__main__':
     # Get the data and preprocess
+    for capa_1 in range(1, 9):
+        for capa_2 in range(1, 9):
+            print('\n--- CAPACITY (%r, %r) ---' %(capa_1, capa_2))
     t_0 = time.time()
     data = data_file.getData()
+    data['capacity'] = np.array([60.0, float(capa_1), float(capa_2)])
     data_file.preprocess(data)
-
     nash_dict = {'K': 2,
                 'I': 2,
                 'operator': [0, 1, 2],
                 'optimizer': 1,
                 'endo_var': {0:{'p':{'domain': 'C', 'lb': 0.0, 'ub': 0.0, 'step':1}},
-                            1:{'p':{'domain': 'C', 'lb': 0.0, 'ub': 1.0, 'step':100}},
-                            2:{'p':{'domain': 'C', 'lb': 0.0, 'ub': 1.0, 'step':100}}}
+                            1:{'p':{'domain': 'C', 'lb': 0.0, 'ub': 1.0, 'step':20}},
+                            2:{'p':{'domain': 'C', 'lb': 0.0, 'ub': 1.0, 'step':20}}},
                 }
     # Instanciate the heuristic game
     game = NashHeuristic(**nash_dict)

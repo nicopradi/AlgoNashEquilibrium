@@ -5,6 +5,7 @@ import sys
 import time
 import copy
 import matplotlib.pyplot as plt
+import warnings
 # CPLEX
 import cplex
 from cplex.exceptions import CplexSolverError
@@ -66,7 +67,7 @@ class Sequential:
                     prices.append(model.solution.get_values('p[' + str(i) + ']'))
                     demand.append(model.solution.get_values('d[' + str(i) + ']'))
             else:
-                prices, choice = non_linear_stackelberg.main(data)
+                prices, choice, x0, status, status_msg = non_linear_stackelberg.main(data)
                 demand = []
                 for i in range(len(self.operator)):
                     demand.append(np.sum([customer for customer in choice[i*data['N']:(i+1)*data['N']]]))
@@ -90,8 +91,8 @@ class Sequential:
                 for j in iteration_to_check:
                     cycle = True
                     for i in range(len(self.operator)):
-                        # TODO: Numerical error ? Tolerance 1e-6
-                        if abs(self.p_history[j, i] - self.p_history[iter, i]) > 1e-4:
+                        # TODO: Numerical error ? Tolerance 1e-3
+                        if abs(self.p_history[j, i] - self.p_history[iter, i]) > 1e-3:
                             cycle = False
                     if cycle is True:
                         cycle_iter = j
@@ -106,6 +107,15 @@ class Sequential:
             # Fix the price of the operators exept for the next optimizer
             data['p_fixed'] = copy.deepcopy(self.p_history[iter])
             self.p_fixed = copy.deepcopy(self.p_history[iter])
+            # Update the previous revenue of the next optimizer
+            data['previous_revenue'] = self.revenue[iter][self.optimizer]
+            # Pass the current operator's strategy as the starting point in the next interation
+            # except if it is unfeasible
+            if linearized is False:
+                print('STATUS: %r' %status_msg)
+                if status != 2:
+                    data['x0'] = copy.deepcopy(x0)
+
             for (i, k) in enumerate(self.operator):
                 if k == data['optimizer']:
                     data['p_fixed'][i] = -1.0
@@ -164,22 +174,26 @@ class Sequential:
 
 
 if __name__ == '__main__':
+
     # LINEAR
     t_0 = time.time()
     stackelberg_dict = data_file.getData()
     data_file.preprocess(stackelberg_dict)
+
     t_1 = time.time()
     sequential_dict = {'K': 2,
                     'operator': [0, 1, 2],
                     'max_iter': 50,
                     'optimizer': 1,
-                    'p_fixed': [0.0, -1.0, 0.805],
+                    'p_fixed': [0.0, -1.0, 0.675],
                     'y_fixed': [1.0, 1.0, 1.0]}
     sequential_game = Sequential(**sequential_dict)
     # Update the dict with the attributes of the Stackelberg game
     sequential_dict.update(stackelberg_dict)
+
     t_2 = time.time()
     sequential_game.run(sequential_dict, linearized=True)
+
     t_3 = time.time()
     print('\n -- TIMING -- ')
     print('Get data + Preprocess: %r sec' %(t_1 - t_0))
@@ -189,25 +203,28 @@ if __name__ == '__main__':
     print('Total number of iterations: %r' %nb_iter)
 
     print('n: %r and r: %r' %(sequential_dict['N'], sequential_dict['R']))
-    sequential_game.plotGraphs('test')
+    sequential_game.plotGraphs('test_2')
     #sequential_game.plotGraphs(0.2)
     '''
     # NON LINEAR
     t_0 = time.time()
     stackelberg_dict = data_file_2.getData()
     data_file_2.preprocess(stackelberg_dict)
+
     t_1 = time.time()
     sequential_dict = {'K': 2,
                     'operator': [0, 1, 2],
                     'max_iter': 50,
                     'optimizer': 1,
-                    'p_fixed': [0.0, -1.0, 0.5],
+                    'p_fixed': [0.0, -1.0, 0.01],
                     'y_fixed': [1.0, 1.0, 1.0]}
     sequential_game = Sequential(**sequential_dict)
     # Update the dict with the attributes for the Stackelberg game
     sequential_dict.update(stackelberg_dict)
+
     t_2 = time.time()
     sequential_game.run(sequential_dict, linearized=False)
+
     t_3 = time.time()
     print('\n -- TIMING -- ')
     print('Get data + Preprocess: %r sec' %(t_1 - t_0))
@@ -215,5 +232,5 @@ if __name__ == '__main__':
     print('Run the game: %r sec' %(t_3 - t_2))
     nb_iter = len([price[0] for price in sequential_game.p_history if price[0] != -1])
     print('Total number of iterations: %r' %nb_iter)
-    sequential_game.plotGraphs(0.2)
+    sequential_game.plotGraphs('test')
     '''
