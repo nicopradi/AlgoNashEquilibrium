@@ -22,7 +22,7 @@ def getData():
     dict['capacity'] = np.array([60.0, 4.0, 4.0]) # Availability for each alternative (opt-out always available)
     # Choice set of the customers
     #	 		           n1 n2 n3...
-    dict['ChoiceSet'] = np.array([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1],  # OPT-OUT
+    dict['choice_set'] = np.array([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1],  # OPT-OUT
                        			  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],  # PSP
                     	 		  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])  # PUP
 
@@ -69,7 +69,7 @@ def preprocess(dict):
         min = 1
         max = dict['N']
         for n in range(dict['N']):
-            if dict['ChoiceSet'][i, n] == 1:
+            if dict['choice_set'][i, n] == 1:
                 priority_list[i, n] = min
                 min += 1
             else:
@@ -129,6 +129,7 @@ def preprocess(dict):
 
     dict['lb_U'] = lb_U
     dict['ub_U'] = ub_U
+
 
 if __name__ == '__main__':
     dict = getData()
