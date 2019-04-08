@@ -186,7 +186,11 @@ class NashHeuristic(object):
                     ub = self.endo_var[i]['p']['ub']
                     step = self.endo_var[i]['p']['step']
                     # reverse_index contains the strategy index
-                    reverse_index = math.floor(-lb + (price*step)/(ub-lb))
+                    if price == ub:
+                        # the upper bound on the price is located in the last subset
+                        reverse_index = math.floor(-lb + (price*step)/(ub-lb)) - 1
+                    else:
+                        reverse_index = math.floor(-lb + (price*step)/(ub-lb))
                     reverse_indices.append(reverse_index)
         if self.K == 2:
             if self.tables[self.optimizer - 1][reverse_indices[0]] >= 0:
@@ -215,7 +219,11 @@ has already been visited before.'%(self.optimizer, prices))
                         lb = self.endo_var[i]['p']['lb']
                         ub = self.endo_var[i]['p']['ub']
                         step = self.endo_var[i]['p']['step']
-                        reverse_index = math.floor(-lb + (price*step)/(ub-lb))
+                        if price == ub:
+                            # the upper bound on the price is located in the last subset
+                            reverse_index = math.floor(-lb + (price*step)/(ub-lb)) - 1
+                        else:
+                            reverse_index = math.floor(-lb + (price*step)/(ub-lb))
                         reverse_indices.append(reverse_index)
             if self.K == 2:
                 # Update the initial state for the next run
@@ -255,7 +263,7 @@ has already been visited before.'%(self.optimizer, prices))
         # Initialize the initial state of the sequential game
         self.initial_state = [self.initial_optimizer, 0]
         run_number = 1
-        # While the tables are not fully filled
+        # While the tables are not completed
         while self.initial_state[0] <= self.K:
             print ('\n--- RUN %r ----' %run_number)
             # Update the optimizer index
@@ -296,12 +304,8 @@ has already been visited before.'%(self.optimizer, prices))
 
 if __name__ == '__main__':
     # Get the data and preprocess
-    for capa_1 in range(1, 9):
-        for capa_2 in range(1, 9):
-            print('\n--- CAPACITY (%r, %r) ---' %(capa_1, capa_2))
     t_0 = time.time()
     data = data_file.getData()
-    data['capacity'] = np.array([60.0, float(capa_1), float(capa_2)])
     data_file.preprocess(data)
     nash_dict = {'K': 2,
                 'I': 2,
