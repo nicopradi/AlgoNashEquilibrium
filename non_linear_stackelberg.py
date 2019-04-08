@@ -487,7 +487,7 @@ def main(data):
     cl = []
     cu = []
     #TODO: Adjust tolerance value, make it a keyword argument
-    tol = 1e-3
+    tol = 1e-4
     # Probabilistic choice constraints
     for i in range(data['I'] + 1):
         for n in range(data['N']):
@@ -542,7 +542,7 @@ def main(data):
                 cu=cu
                 )
     # Set the parameters
-    nlp.addOption('print_level', 0)
+    #nlp.addOption('print_level', 0)
     nlp.addOption('max_iter', 1500)
     nlp.addOption('warm_start_init_point', 'yes')
     nlp.addOption('warm_start_bound_push', 1e-19)
@@ -550,6 +550,11 @@ def main(data):
     nlp.addOption('warm_start_slack_bound_frac', 1e-19)
     nlp.addOption('warm_start_slack_bound_push', 1e-19)
     nlp.addOption('warm_start_mult_bound_push', 1e-19)
+    # Check for invalid derivative information
+    nlp.addOption('check_derivatives_for_naninf', 'yes')
+    # Set the tolerance of value
+    nlp.addOption('acceptable_tol', 1e-3)
+    #nlp.addOption('constr_viol_tol', tol)
     # Solve the problem
     x, info = nlp.solve(x0)
 
