@@ -29,6 +29,7 @@ class Stackelberg(object):
                 previous_revenue  Revenue of the current optimizer before its best reponse strategy
                 capacity          Capacity value for each alternative [list]
                 priority_list     Priority list for each alternative
+                R_coef            Number of draws for the coefficient
         '''
         # Keyword arguments
         self.I = kwargs.get('I')
@@ -44,6 +45,8 @@ class Stackelberg(object):
         # Optional capacity constraints
         self.capacity = kwargs.get('capacity', None)
         self.priority_list = kwargs.get('priority_list', None)
+        # Optimial argument (Mixed logit or logit)
+        self.R_coef = kwargs.get('R_coef', None)
 
         ### Mapping
         # Price variables
@@ -54,11 +57,21 @@ class Stackelberg(object):
             current_index += 1
 
         # Utility variables
-        self.U = np.empty([self.I + 1, self.N], dtype = int)
-        for i in range(len(self.U)):
-            for j in range(len(self.U[0])):
-                self.U[i, j] = current_index
-                current_index += 1
+        if self.R_coef is None:
+            # Logit
+            self.U = np.empty([self.I + 1, self.N], dtype = int)
+            for i in range(len(self.U)):
+                for j in range(len(self.U[0])):
+                    self.U[i, j] = current_index
+                    current_index += 1
+        else:
+            # Mixed logit
+            self.U = np.empty([self.I + 1, self.N, self.R_coef], dtype = int)
+            for i in range(len(self.U)):
+                for j in range(len(self.U[i])):
+                    for r in range(len(self.U[i, j])):
+                        self.U[i, j, r] = current_index
+                        current_index += 1
 
         # Choice variables
         self.w = np.empty([self.I + 1, self.N], dtype = int)
@@ -102,9 +115,15 @@ class Stackelberg(object):
                     expression += -x[self.w[i, n]]
             gradient.append(expression)
         # Utility variables
-        for i in range(len(self.U)):
-            for n in range(len(self.U[i])):
-                gradient.append(0.0)
+        if self.R_coef is None:
+            for i in range(len(self.U)):
+                for n in range(len(self.U[i])):
+                    gradient.append(0.0)
+        else:
+            for i in range(len(self.U)):
+                for n in range(len(self.U[i])):
+                    for r in range(len(self.U[i, n])):
+                        gradient.append(0.0)
         # Choice variables
         for i in range(len(self.w)):
             for n in range(len(self.w[i])):
@@ -128,25 +147,63 @@ class Stackelberg(object):
         for i in range(len(self.w)):
             for n in range(len(self.w[i])):
                 expression = 0.0
+                # Check if alternative's capacity are given
                 if self.capacity is not None:
-                    numerator = float(np.exp(x[self.U[i, n]]) * x[self.y[i, n]])
-                    denominator = 0.0
-                    for j in range(len(self.w)):
-                        denominator += (np.exp(x[self.U[j, n]]) * x[self.y[j, n]])
-                    expression = x[self.w[i, n]] - (numerator/denominator)
+                    # Check if we are given the logit or mixed logit model
+                    if self.R_coef is None:
+                        # Logit
+                        numerator = float(np.exp(x[self.U[i, n]]) * x[self.y[i, n]])
+                        denominator = 0.0
+                        for j in range(len(self.w)):
+                            denominator += (np.exp(x[self.U[j, n]]) * x[self.y[j, n]])
+                        expression = x[self.w[i, n]] - (numerator/denominator)
+                    else:
+                        # Mixed logit
+                        sum = 0
+                        for r in range(self.R_coef):
+                            numerator = float(np.exp(x[self.U[i, n, r]]) * x[self.y[i, n]])
+                            denominator = 0.0
+                            for j in range(len(self.w)):
+                                denominator += (np.exp(x[self.U[j, n, r]]) * x[self.y[j, n]])
+                            sum += (numerator/denominator)
+                        sum = sum/self.R_coef
+                        expression = x[self.w[i, n]] - sum
+
                 else:
-                    numerator = float(np.exp(x[self.U[i, n]]))
-                    denominator = 0.0
-                    for j in range(len(self.w)):
-                        denominator += np.exp(x[self.U[j, n]])
-                    expression = x[self.w[i, n]] - numerator/denominator
+                    if self.R_coef is None:
+                        numerator = float(np.exp(x[self.U[i, n]]))
+                        denominator = 0.0
+                        for j in range(len(self.w)):
+                            denominator += np.exp(x[self.U[j, n]])
+                        expression = x[self.w[i, n]] - numerator/denominator
+                    else:
+                        sum = 0
+                        for r in range(self.R_coef):
+                            numerator = float(np.exp(x[self.U[i, n, r]]))
+                            denominator = 0.0
+                            for j in range(len(self.w)):
+                                denominator += (np.exp(x[self.U[j, n, r]]))
+                            sum += (numerator/denominator)
+                        sum = sum/self.R_coef
+                        expression = x[self.w[i, n]] - sum
+
                 constraints.append(expression)
 
         # Utility value
-        for i in range(len(self.U)):
-            for n in range(len(self.U[i])):
-                expression = x[self.U[i, n]] - self.endo_coef[i, n] * x[self.p[i]] - self.exo_utility[i, n]
-                constraints.append(expression)
+        if self.R_coef is None:
+            # Logit
+            for i in range(len(self.U)):
+                for n in range(len(self.U[i])):
+                    expression = x[self.U[i, n]] - self.endo_coef[i, n] * x[self.p[i]] - self.exo_utility[i, n]
+                    constraints.append(expression)
+        else:
+            # Mixed logit
+            for i in range(len(self.U)):
+                for n in range(len(self.U[i])):
+                    for r in range(len(self.U[i, n])):
+                        expression = x[self.U[i, n, r]] - self.endo_coef[i, n, r] * x[self.p[i]] - self.exo_utility[i, n, r]
+                        constraints.append(expression)
+
 
         # Fixed prices
         if (self.optimizer is not None):
@@ -210,89 +267,175 @@ class Stackelberg(object):
                 for j in range(len(self.p)):
                     jacobian.append(0.0)
                 # Utility variables
-                for j in range(len(self.U)):
-                    for m in range(len(self.U[j])):
-                        if m != n:
-                            expression = 0.0
-                        elif i == j:
-                            if self.capacity is None:
-                                sum = 0
-                                # TODO: Put the sum in the outer loop to reduce running time, replace by np.sum
-                                for k in range(len(self.U)):
-                                    sum += np.exp(x[self.U[k, n]])
-                                expression = -(np.exp(x[self.U[j, m]])*sum - np.exp(x[self.U[j, m]])**2)/(sum**2)
-                            else:
-                                sum = 0
-                                for k in range(len(self.U)):
-                                    #print('TERM: %r' %(np.exp(x[self.U[k, m]])*x[self.y[k, m]]))
-                                    sum += (np.exp(x[self.U[k, m]])*x[self.y[k, m]])
-                                #print('SUM: %r' %sum)
-                                expression = -(np.exp(x[self.U[j, m]])*x[self.y[j, m]]*sum - (np.exp(x[self.U[j, m]])*x[self.y[j, m]])**2)/(sum**2)
-                        else:
-                            expression = 0.0
-                            if self.capacity is None:
-                                sum = 0
-                                for k in range(len(self.U)):
-                                    sum += np.exp(x[self.U[k, m]])
-                                expression = (np.exp(x[self.U[i, m]])*np.exp(x[self.U[j, m]]))/(sum*sum)
-                            else:
-                                sum = 0
-                                for k in range(len(self.U)):
-                                    sum += (np.exp(x[self.U[k, m]])*x[self.y[k, m]])
-                                expression = (np.exp(x[self.U[i, m]])*np.exp(x[self.U[j, m]])*x[self.y[i, m]]*x[self.y[j, m]])/(sum**2)
-                        jacobian.append(expression)
-                # Choice variables
-                for j in range(len(self.w)):
-                    for m in range(len(self.w[j])):
-                        if (j == i) and (n == m):
-                            jacobian.append(1.0)
-                        else:
-                            jacobian.append(0.0)
-                # Availability variables
-                if self.capacity is not None:
-                    for j in range(len(self.y)):
-                        for m in range(len(self.y[j])):
-                            if (j == i) and (n == m):
-                                sum = 0
-                                for k in range(len(self.y)):
-                                    sum += (np.exp(x[self.U[k, m]])*x[self.y[k, m]])
-                                expression = -(np.exp(x[self.U[i, n]])*sum - x[self.y[i, n]]*(np.exp(x[self.U[i, n]])**2))/(sum**2)
-                            elif (n == m):
-                                sum = 0
-                                for k in range(len(self.y)):
-                                    sum += (np.exp(x[self.U[k, m]])*x[self.y[k, m]])
-                                expression = np.exp(x[self.U[i, n]])*x[self.y[i, n]]*np.exp(x[self.U[j, n]])/(sum**2)
+                if self.R_coef is None:
+                    for j in range(len(self.U)):
+                        for m in range(len(self.U[j])):
+                            if m != n:
+                                expression = 0.0
+                            elif i == j:
+                                if self.capacity is None:
+                                    sum = 0
+                                    # TODO: Put the sum in the outer loop to reduce running time, replace by np.sum
+                                    for k in range(len(self.U)):
+                                        sum += np.exp(x[self.U[k, n]])
+                                    expression = -(np.exp(x[self.U[j, m]])*sum - np.exp(x[self.U[j, m]])**2)/(sum**2)
+                                else:
+                                    sum = 0
+                                    for k in range(len(self.U)):
+                                        sum += (np.exp(x[self.U[k, m]])*x[self.y[k, m]])
+                                    expression = -(np.exp(x[self.U[j, m]])*x[self.y[j, m]]*sum - (np.exp(x[self.U[j, m]])*x[self.y[j, m]])**2)/(sum**2)
                             else:
                                 expression = 0.0
+                                if self.capacity is None:
+                                    sum = 0
+                                    for k in range(len(self.U)):
+                                        sum += np.exp(x[self.U[k, m]])
+                                    expression = (np.exp(x[self.U[i, m]])*np.exp(x[self.U[j, m]]))/(sum*sum)
+                                else:
+                                    sum = 0
+                                    for k in range(len(self.U)):
+                                        sum += (np.exp(x[self.U[k, m]])*x[self.y[k, m]])
+                                    expression = (np.exp(x[self.U[i, m]])*np.exp(x[self.U[j, m]])*x[self.y[i, m]]*x[self.y[j, m]])/(sum**2)
                             jacobian.append(expression)
+                else:
+                    for j in range(len(self.U)):
+                        for m in range(len(self.U[j])):
+                            for r in range(len(self.U[j, m])):
+                                if m != n:
+                                    expression = 0.0
+                                elif i == j:
+                                    expression = 0.0
+                                    if self.capacity is None:
+                                        for s in range(len(self.U[j, m])):
+                                            sum = np.sum([np.exp(x[self.U[k, n, s]]) for k in range(len(self.U))])
+                                            expression += -(np.exp(x[self.U[j, m, s]])*sum - np.exp(x[self.U[j, m, s]])**2)/(sum**2)
+                                    else:
+                                        for s in range(len(self.U[j, m])):
+                                            sum = np.sum([np.exp(x[self.U[k, n, s]])*x[self.y[k, m]] for k in range(len(self.U))])
+                                            expression += -(np.exp(x[self.U[j, m, s]])*x[self.y[j, m]]*sum - (np.exp(x[self.U[j, m, s]])*x[self.y[j, m]])**2)/(sum**2)
+                                    expression = expression/float(self.R_coef)
+                                else:
+                                    expression = 0.0
+                                    if self.capacity is None:
+                                        for s in range(len(self.U[j, m])):
+                                            sum = 0
+                                            for k in range(len(self.U)):
+                                                sum += np.exp(x[self.U[k, m, s]])
+                                            expression += (np.exp(x[self.U[i, m, s]])*np.exp(x[self.U[j, m, s]]))/(sum**2)
+                                    else:
+                                        for s in range(len(self.U[j, m])):
+                                            sum = 0
+                                            for k in range(len(self.U)):
+                                                sum += (np.exp(x[self.U[k, m, s]])*x[self.y[k, m]])
+                                            expression += (np.exp(x[self.U[i, m, s]])*np.exp(x[self.U[j, m, s]])*x[self.y[i, m]]*x[self.y[j, m]])/(sum**2)
+                                    expression = expression/float(self.R_coef)
+                                jacobian.append(expression)
 
-        #### Utility value constraints
-        # For each constraint
-        for i in range(len(self.U)):
-            for n in range(len(self.U[i])):
-                # For each variable
-                # Price variables
-                for j in range(len(self.p)):
-                    if j == i:
-                        jacobian.append(-self.endo_coef[i, n])
-                    else:
-                        jacobian.append(0.0)
-                # Utility variables
-                for j in range(len(self.U)):
-                    for m in range(len(self.U[j])):
+                # Choice variables
+                for j in range(len(self.w)):
+                    for m in range(len(self.w[j])):
                         if (j == i) and (n == m):
                             jacobian.append(1.0)
                         else:
                             jacobian.append(0.0)
-                # Choice variables
-                for j in range(len(self.w)):
-                    for m in range(len(self.w[j])):
-                        jacobian.append(0.0)
                 # Availability variables
                 if self.capacity is not None:
-                    for j in range(len(self.y)):
-                        for m in range(len(self.y[j])):
+                    if self.R_coef is None:
+                        for j in range(len(self.y)):
+                            for m in range(len(self.y[j])):
+                                if (j == i) and (n == m):
+                                    sum = 0
+                                    for k in range(len(self.y)):
+                                        sum += (np.exp(x[self.U[k, m]])*x[self.y[k, m]])
+                                    expression = -(np.exp(x[self.U[i, n]])*sum - x[self.y[i, n]]*(np.exp(x[self.U[i, n]])**2))/(sum**2)
+                                elif (n == m):
+                                    sum = 0
+                                    for k in range(len(self.y)):
+                                        sum += (np.exp(x[self.U[k, m]])*x[self.y[k, m]])
+                                    expression = np.exp(x[self.U[i, n]])*x[self.y[i, n]]*np.exp(x[self.U[j, n]])/(sum**2)
+                                else:
+                                    expression = 0.0
+                                jacobian.append(expression)
+                    else:
+                        for j in range(len(self.y)):
+                            for m in range(len(self.y[j])):
+                                if (j == i) and (n == m):
+                                    for s in range(len(self.U[j, m])):
+                                        sum = 0
+                                        for k in range(len(self.y)):
+                                            sum += (np.exp(x[self.U[k, m, s]])*x[self.y[k, m]])
+                                        expression += -(np.exp(x[self.U[i, n, s]])*sum - x[self.y[i, n]]*(np.exp(x[self.U[i, n, s]])**2))/(sum**2)
+                                elif (n == m):
+                                    for s in range(len(self.U[j, m])):
+                                        sum = 0
+                                        for k in range(len(self.y)):
+                                            sum += (np.exp(x[self.U[k, m, s]])*x[self.y[k, m]])
+                                        expression += np.exp(x[self.U[i, n, s]])*x[self.y[i, n]]*np.exp(x[self.U[j, n, s]])/(sum**2)
+                                else:
+                                    expression = 0.0
+                                expression = expression/float(self.R_coef)
+                                jacobian.append(expression)
+
+
+        #### Utility value constraints
+        if self.R_coef is None:
+            # Logit
+            # For each constraint
+            for i in range(len(self.U)):
+                for n in range(len(self.U[i])):
+                    # For each variable
+                    # Price variables
+                    for j in range(len(self.p)):
+                        if j == i:
+                            jacobian.append(-self.endo_coef[i, n])
+                        else:
                             jacobian.append(0.0)
+                    # Utility variables
+                    for j in range(len(self.U)):
+                        for m in range(len(self.U[j])):
+                            if (i == j) and (n == m):
+                                jacobian.append(1.0)
+                            else:
+                                jacobian.append(0.0)
+                    # Choice variables
+                    for j in range(len(self.w)):
+                        for m in range(len(self.w[j])):
+                            jacobian.append(0.0)
+                    # Availability variables
+                    if self.capacity is not None:
+                        for j in range(len(self.y)):
+                            for m in range(len(self.y[j])):
+                                jacobian.append(0.0)
+        else:
+            # Mixed Logit
+            # For each constraint
+            for i in range(len(self.U)):
+                for n in range(len(self.U[i])):
+                    for r in range(len(self.U[i, n])):
+                        # For each variable
+                        # Price variables
+                        for j in range(len(self.p)):
+                            if j == i:
+                                jacobian.append(-self.endo_coef[i, n, r])
+                            else:
+                                jacobian.append(0.0)
+                        # Utility variables
+                        for j in range(len(self.U)):
+                            for m in range(len(self.U[j])):
+                                for s in range(len(self.U[j, m])):
+                                    if (i == j) and (n == m) and (r == s):
+                                        jacobian.append(1.0)
+                                    else:
+                                        jacobian.append(0.0)
+                        # Choice variables
+                        for j in range(len(self.w)):
+                            for m in range(len(self.w[j])):
+                                jacobian.append(0.0)
+                        # Availability variables
+                        if self.capacity is not None:
+                            for j in range(len(self.y)):
+                                for m in range(len(self.y[j])):
+                                    jacobian.append(0.0)
 
         #### Fixed prices constraints
         if (self.optimizer is not None):
@@ -306,9 +449,15 @@ class Stackelberg(object):
                         else:
                             jacobian.append(0.0)
                     # Utility variables
-                    for j in range(len(self.U)):
-                        for m in range(len(self.U[j])):
-                            jacobian.append(0.0)
+                    if self.R_coef is None:
+                        for j in range(len(self.U)):
+                            for m in range(len(self.U[j])):
+                                jacobian.append(0.0)
+                    else:
+                        for j in range(len(self.U)):
+                            for m in range(len(self.U[j])):
+                                for r in range(len(self.U[j, m])):
+                                    jacobian.append(0.0)
                     # Choice variables
                     for j in range(len(self.w)):
                         for m in range(len(self.w[j])):
@@ -329,9 +478,15 @@ class Stackelberg(object):
                     for j in range(len(self.p)):
                         jacobian.append(0.0)
                     # Utility variables
-                    for j in range(len(self.U)):
-                        for m in range(len(self.U[j])):
-                            jacobian.append(0.0)
+                    if self.R_coef is None:
+                        for j in range(len(self.U)):
+                            for m in range(len(self.U[j])):
+                                jacobian.append(0.0)
+                    else:
+                        for j in range(len(self.U)):
+                            for m in range(len(self.U[j])):
+                                for r in range(len(self.U[j, m])):
+                                    jacobian.append(0.0)
                     # Choice variables
                     for j in range(len(self.w)):
                         for m in range(len(self.w[j])):
@@ -350,9 +505,15 @@ class Stackelberg(object):
                 for j in range(len(self.p)):
                     jacobian.append(0.0)
                 # Utility variables
-                for j in range(len(self.U)):
-                    for m in range(len(self.U[j])):
-                        jacobian.append(0.0)
+                if self.R_coef is None:
+                    for j in range(len(self.U)):
+                        for m in range(len(self.U[j])):
+                            jacobian.append(0.0)
+                else:
+                    for j in range(len(self.U)):
+                        for m in range(len(self.U[j])):
+                            for r in range(len(self.U[j, m])):
+                                jacobian.append(0.0)
                 # Choice variables
                 for j in range(len(self.w)):
                     for m in range(len(self.w[j])):
@@ -371,9 +532,15 @@ class Stackelberg(object):
                 for j in range(len(self.p)):
                     jacobian.append(0.0)
                 # Utility variables
-                for j in range(len(self.U)):
-                    for m in range(len(self.U[j])):
-                        jacobian.append(0.0)
+                if self.R_coef is None:
+                    for j in range(len(self.U)):
+                        for m in range(len(self.U[j])):
+                            jacobian.append(0.0)
+                else:
+                    for j in range(len(self.U)):
+                        for m in range(len(self.U[j])):
+                            for r in range(len(self.U[j, m])):
+                                jacobian.append(0.0)
                 # Choice variables
                 for j in range(len(self.w)):
                     for m in range(len(self.w[j])):
@@ -393,9 +560,15 @@ class Stackelberg(object):
                     for j in range(len(self.p)):
                         jacobian.append(0.0)
                     # Utility variables
-                    for j in range(len(self.U)):
-                        for m in range(len(self.U[j])):
-                            jacobian.append(0.0)
+                    if self.R_coef is None:
+                        for j in range(len(self.U)):
+                            for m in range(len(self.U[j])):
+                                jacobian.append(0.0)
+                    else:
+                        for j in range(len(self.U)):
+                            for m in range(len(self.U[j])):
+                                for r in range(len(self.U[j, m])):
+                                    jacobian.append(0.0)
                     # Choice variables
                     for j in range(len(self.w)):
                         for m in range(len(self.w[j])):
@@ -420,9 +593,15 @@ class Stackelberg(object):
                         for j in range(len(self.p)):
                             jacobian.append(0.0)
                         # Utility variables
-                        for j in range(len(self.U)):
-                            for m in range(len(self.U[j])):
-                                jacobian.append(0.0)
+                        if self.R_coef is None:
+                            for j in range(len(self.U)):
+                                for m in range(len(self.U[j])):
+                                    jacobian.append(0.0)
+                        else:
+                            for j in range(len(self.U)):
+                                for m in range(len(self.U[j])):
+                                    for r in range(len(self.U[j, m])):
+                                        jacobian.append(0.0)
                         # Choice variables
                         for j in range(len(self.w)):
                             for m in range(len(self.w[j])):
@@ -450,29 +629,29 @@ def main(data):
     ub = []
     # Price variables
     for i in range(data['I'] + 1):
-        x0.append((data['lb_p'][i]+data['ub_p'][i])/2.0)
         lb.append(data['lb_p'][i])
         ub.append(data['ub_p'][i])
     # Utility variables
-    for i in range(data['I'] + 1):
-        for n in range(data['N']):
-            x0.append((data['lb_U'][i, n]+data['ub_U'][i, n])/2.0)
-            lb.append(data['lb_U'][i, n])
-            ub.append(data['ub_U'][i, n])
+    if 'R_coef' in data.keys():
+        for i in range(data['I'] + 1):
+            for n in range(data['N']):
+                for r in range(data['R_coef']):
+                    lb.append(data['lb_U'][i, n, r])
+                    ub.append(data['ub_U'][i, n, r])
+    else:
+        for i in range(data['I'] + 1):
+            for n in range(data['N']):
+                lb.append(data['lb_U'][i, n])
+                ub.append(data['ub_U'][i, n])
     # Choice variables
     for i in range(data['I'] + 1):
         for n in range(data['N']):
-            if i == 0:
-                x0.append(1.0)
-            else:
-                x0.append(0.0)
             lb.append(0.0)
             ub.append(1.0)
     # Capacity variables
     if 'capacity' in data.keys():
         for i in range(data['I'] + 1):
             for n in range(data['N']):
-                x0.append(1.0)
                 lb.append(0.0)
                 ub.append(1.0)
 
@@ -494,10 +673,18 @@ def main(data):
             cl.append(-tol)
             cu.append(tol)
     # Utility value constraints
-    for i in range(data['I'] + 1):
-        for n in range(data['N']):
-            cl.append(-tol)
-            cu.append(tol)
+    if 'R_coef' in data.keys():
+    # Mixed logit
+        for i in range(data['I'] + 1):
+            for n in range(data['N']):
+                for r in range(data['R_coef']):
+                    cl.append(-tol)
+                    cu.append(tol)
+    else:
+        for i in range(data['I'] + 1):
+            for n in range(data['N']):
+                cl.append(-tol)
+                cu.append(tol)
     # Fixed prices constraints
     if 'optimizer' in data.keys():
         for i in range(data['I'] + 1):
@@ -589,12 +776,22 @@ def getInitialPoint(data):
         count += 1
 
     # Utility variables
-    u_index = np.empty([data['I'] + 1, data['N']], dtype = int)
-    for i in range(data['I'] + 1):
-        for n in range(data['N']):
-            x0.append(data['endo_coef'][i, n]*x0[p_index[i]] + data['exo_utility'][i, n])
-            u_index[i, n] = count
-            count += 1
+    if 'R_coef' in data.keys():
+        u_index = np.empty([data['I'] + 1, data['N'], data['R_coef']], dtype = int)
+        for i in range(data['I'] + 1):
+            for n in range(data['N']):
+                for r in range(data['R_coef']):
+                    x0.append(data['endo_coef'][i, n, r]*x0[p_index[i]] + data['exo_utility'][i, n, r])
+                    u_index[i, n, r] = count
+                    count += 1
+    else:
+        u_index = np.empty([data['I'] + 1, data['N']], dtype = int)
+        for i in range(data['I'] + 1):
+            for n in range(data['N']):
+                x0.append(data['endo_coef'][i, n]*x0[p_index[i]] + data['exo_utility'][i, n])
+                u_index[i, n] = count
+                count += 1
+
 
     # Compute choice variables and availability variables
     # according to whether capacities are given
@@ -621,9 +818,20 @@ def getInitialPoint(data):
             # Choice variables
             for i in range(data['I'] + 1):
                 for n in range(data['N']):
-                    denominator = np.sum([np.exp(x0[u_index[j, n]])*x0[y_index[j, n]] for j in range(data['I'] + 1)])
-                    numerator = np.exp(x0[u_index[i, n]])*x0[y_index[i, n]]
-                    x0[w_index[i, n]] = float(numerator)/denominator
+                    if 'R_coef' in data.keys():
+                        # Mixed Logit
+                        sum = 0.0
+                        for r in range(data['R_coef']):
+                            numerator = np.exp(x0[u_index[i, n, r]])*x0[y_index[i, n]]
+                            denominator = np.sum([np.exp(x0[u_index[j, n, r]])*x0[y_index[j, n]] for j in range(data['I'] + 1)])
+                            sum += float(numerator)/denominator
+                        sum = sum/data['R_coef']
+                        x0[w_index[i, n]] = sum
+                    else:
+                        # Logit
+                        denominator = np.sum([np.exp(x0[u_index[j, n]])*x0[y_index[j, n]] for j in range(data['I'] + 1)])
+                        numerator = np.exp(x0[u_index[i, n]])*x0[y_index[i, n]]
+                        x0[w_index[i, n]] = float(numerator)/denominator
             # Check if the solution is feasible
             feasible = True
             capa = copy.deepcopy(data['capacity'])
@@ -649,11 +857,24 @@ def getInitialPoint(data):
         w_index = np.empty([data['I'] + 1, data['N']], dtype = int)
         for i in range(data['I'] + 1):
             for n in range(data['N']):
-                denominator = np.sum([np.exp(x0[u_index[j, n]]) for j in range(data['I'] + 1)])
-                numerator = np.exp(x0[u_index[i, n]])
-                x0.append(float(numerator)/denominator)
-                w_index[i, n] = count
-                count += 1
+                if 'R_coef' in data.keys():
+                    # Mixed Logit
+                    sum = 0.0
+                    for r in range(data['R_coef']):
+                        numerator = np.exp(x0[u_index[i, n, r]])
+                        denominator = np.sum([np.exp(x0[u_index[j, n, r]]) for j in range(data['I'] + 1)])
+                        sum += float(numerator)/denominator
+                    sum = sum/data['R_coef']
+                    x0.append(sum)
+                    w_index[i, n] = count
+                    count += 1
+                else:
+                    # Logit
+                    numerator = np.exp(x0[u_index[i, n]])
+                    denominator = np.sum([np.exp(x0[u_index[j, n]]) for j in range(data['I'] + 1)])
+                    x0.append(float(numerator)/denominator)
+                    w_index[i, n] = count
+                    count += 1
 
     return x0
 
