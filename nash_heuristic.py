@@ -27,7 +27,7 @@ class NashHeuristic(object):
                 K                  Number of operators
                 I                  Number of alternatives
                 operator           Mapping between alternatives and operators
-                endo_var            Mapping between alternatives and corresponding endogene variables
+                endo_var           Mapping between alternatives and corresponding endogene variables
         '''
         self.K = kwargs.get('K')
         self.I = kwargs.get('I')
@@ -134,7 +134,12 @@ class NashHeuristic(object):
             data['optimizer'] = (data['optimizer'] % self.K) + 1
             self.optimizer = data['optimizer']
             # Check if the next configuration has already been visited
-            visited = self.alreadyVisited(prices)
+            if cycle is False:
+                visited, cycle_iter = self.alreadyVisited(prices, iter)
+                if cycle_iter is not None:
+                    # The next config has already been visited in the current run
+                    score = self.getCycleAmplitude(p_history[int(cycle_iter):])
+                    cycle = True
             # Change the fixed price of the operators except for the next optimizer
             data['p_fixed'] = copy.deepcopy(prices)
             # Pass the current operator's strategy as the strating point in the next interation
@@ -147,6 +152,16 @@ class NashHeuristic(object):
                     data['p_fixed'][i] = -1.0
             # Go to the next iteration
             iter += 1
+
+            #TODO: Remove next lines
+            # Print the final results
+            print('\n--- TABLES ---')
+            for (k, table) in enumerate(self.tables):
+                # The operator index starts at 1. 0 is opt-out
+                print('\nOptimizer %r' %(k + 1))
+                print('Prices \t\t Nash Equilibrium found\n')
+                for (p_range, value) in zip(self.mapping[k + 1], self.tables[k]):
+                    print('%r \t\t %r' %(list(p_range.values())[0], value))
 
         # Update the tables
         if cycle:
@@ -172,7 +187,7 @@ class NashHeuristic(object):
 
         return score
 
-    def alreadyVisited(self, prices):
+    def alreadyVisited(self, prices, iter):
         ''' Check whether a given configuration has already been visited before.
             Args:
                 prices          list of prices for each alternatives
@@ -193,13 +208,23 @@ class NashHeuristic(object):
                         reverse_index = math.floor(-lb + (price*step)/(ub-lb))
                     reverse_indices.append(reverse_index)
         if self.K == 2:
-            if self.tables[self.optimizer - 1][reverse_indices[0]] >= 0:
+            table_value = self.tables[self.optimizer - 1][reverse_indices[0]]
+            if table_value >= 0:
                 print('The next configuration \n Optimizer: %r \n Prices: %r \n\
 has already been visited before.'%(self.optimizer, prices))
-                return True
+                if table_value % 1 == 0:
+                    # The config has already been visited in the current run
+                    return True, self.tables[self.optimizer - 1][reverse_indices[0]]
+                else:
+                    # The config has already been visited in a previous
+                    return True, None
         else:
             raise NotImplementedError('To be implemented')
-        return False
+
+        # Update the current config in the table
+        self.tables[self.optimizer - 1][reverse_indices[0]] = float(iter)
+
+        return False, None
 
     def updateTables(self, p_history, length=0, score=np.inf):
         ''' Update the tables according to the prices history and whether

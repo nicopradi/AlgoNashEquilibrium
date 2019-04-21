@@ -1,4 +1,4 @@
-# Data Stackelberg game with capacity, continuous price
+# Data Stackelberg game, continuous price
 import numpy as np
 
 def getData():
