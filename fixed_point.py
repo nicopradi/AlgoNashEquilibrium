@@ -834,7 +834,6 @@ class Fixed_Point:
             for i in range(self.I +1):
                 print('Previous price of alt %r : %r' %(i, model.solution.get_values('price[' + str(i) + ']')))
                 print('After price of alt %r : %r' %(i, self.p[i]))
-            '''
 
             for k in range(1, self.K + 1):
                 for i in range(self.I + 1):
@@ -872,7 +871,6 @@ class Fixed_Point:
             for n in range(self.N):
                 for r in range(self.R):
                     print('Umax (n = %r, r = %r): %r' %(n, r, model.solution.get_values('Umax[' + str(n) + ']' + '[' + str(r) + ']')))
-            '''
 
             return model
         except CplexSolverError as e:
@@ -882,6 +880,7 @@ if __name__ == '__main__':
     # Get the data and preprocess
     dict = data_file.getData()
     data_file.preprocess(dict)
+    #data_file.preprocess2(dict)
     # Instanciate a Stackelberg game and solve it
     game = Fixed_Point(**dict)
     model = game.getModel()
