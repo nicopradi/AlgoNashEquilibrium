@@ -34,7 +34,10 @@ class Fixed_Point:
                 ub_Umax         Upper bound on utility for each customer
                 M_U             Big M value for each customer for the utility
                 exo_utility     Value of the utility for the exogene variables
-                endo_coef        Beta coefficient of the endogene variables
+                endo_coef       Beta coefficient of the endogene variables
+                wAft_precomputed wAft value when is was possible to guess its value
+                fixed_cost      Initial cost of an alternative
+                customer_cost   Additional cost of an alternative for each addition customer
 
         '''
         ## TODO: Check correctness of the attributes value
@@ -57,6 +60,10 @@ class Fixed_Point:
         self.M_U = kwargs.get('M_U')
         self.exo_utility = kwargs.get('exo_utility')
         self.endo_coef = kwargs.get('endo_coef')
+        self.wAft_precomputed = kwargs.get('wAft_precomputed', None)
+        # Optional
+        self.fixed_cost = kwargs.get('fixed_cost', None)
+        self.customer_cost = kwargs.get('customer_cost', None)
 
     def getModel(self):
         ''' Construct a CPLEX model corresponding to a Stackelberg game (1 leader,
@@ -69,23 +76,16 @@ class Fixed_Point:
         model.objective.set_sense(model.objective.sense.minimize) ## Set the objective function to maximization
 
         ##### DECISION VARIABLES #####
-        nb_var = 0
         ## LEVEL 1 : OPERATOR LEVEL
 
         ## BEFORE
         # Revenue for each operator
-        for k in range(1, self.K + 1):
-            model.variables.add(types = [model.variables.type.continuous],
-                                lb = [-cplex.infinity], ub = [cplex.infinity],
-                                names = ['revenue[' + str(k) + ']'])
-            nb_var += 1
 
         # Price set for the alternatives
         for i in range(self.I + 1):
             model.variables.add(types = [model.variables.type.continuous],
                                 lb = [-cplex.infinity], ub = [cplex.infinity],
                                 names = ['price[' + str(i) + ']'])
-            nb_var += 1
 
         ## AFTER
         # Revenue maximal for each operator
@@ -93,7 +93,6 @@ class Fixed_Point:
             model.variables.add(types = [model.variables.type.continuous],
                                 lb = [-cplex.infinity], ub = [cplex.infinity],
                                 names = ['revenueMaxAft[' + str(k) + ']'])
-            nb_var += 1
 
         # Revenue for each operator for each strategy
         for k in range(1, self.K + 1):
@@ -101,14 +100,12 @@ class Fixed_Point:
                 model.variables.add(types = [model.variables.type.continuous],
                                     lb = [-cplex.infinity], ub = [cplex.infinity],
                                     names = ['revenueAft[' + str(k) + ']' + '[' + str(l) + ']'])
-                nb_var += 1
 
         # Strategy picked by each operator
         for k in range(1, self.K + 1):
             for l in range(self.n_price_levels):
                 model.variables.add(types = [model.variables.type.binary],
                                     names = ['vAft[' + str(k) + ']' + '[' + str(l) + ']'])
-                nb_var += 1
 
         ## LEVEL 2 : CUSTOMER LEVEL
         ## BEFORE
@@ -119,7 +116,6 @@ class Fixed_Point:
                     model.variables.add(types = [model.variables.type.continuous],
                                         lb = [-cplex.infinity], ub = [cplex.infinity],
                                         names = ['U[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']'])
-                    nb_var += 1
 
         # Maximum Discounted Utility
         for n in range(self.N):
@@ -127,7 +123,6 @@ class Fixed_Point:
                 model.variables.add(types = [model.variables.type.continuous],
                                     lb = [-cplex.infinity], ub = [cplex.infinity],
                                     names = ['Umax[' + str(n) + ']' + '[' + str(r) + ']'])
-                nb_var += 1
 
         # Choice among alternatives
         for i in range(self.I + 1):
@@ -135,7 +130,6 @@ class Fixed_Point:
                 for r in range(self.R):
                     model.variables.add(types = [model.variables.type.binary],
                                         names = ['w[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']'])
-                    nb_var += 1
 
         # Linearized price
         for i in range(self.I + 1):
@@ -144,7 +138,6 @@ class Fixed_Point:
                     model.variables.add(types = [model.variables.type.continuous],
                                         lb = [-cplex.infinity], ub = [cplex.infinity],
                                         names = ['alpha[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']'])
-                    nb_var += 1
 
         ## AFTER
         # Choice among alternative for each strategy
@@ -155,7 +148,6 @@ class Fixed_Point:
                         for l in range(self.n_price_levels):
                             model.variables.add(types = [model.variables.type.binary],
                                                 names = ['wAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']'])
-                            nb_var += 1
 
         # Utility
         for k in range(1, self.K + 1):
@@ -166,7 +158,6 @@ class Fixed_Point:
                             model.variables.add(types = [model.variables.type.continuous],
                                                 lb = [-cplex.infinity], ub = [cplex.infinity],
                                                 names = ['UAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']'])
-                            nb_var += 1
 
         # Maximum Discounted Utility
         for k in range(1, self.K + 1):
@@ -176,28 +167,23 @@ class Fixed_Point:
                         model.variables.add(types = [model.variables.type.continuous],
                                             lb = [-cplex.infinity], ub = [cplex.infinity],
                                             names = ['UmaxAft[' + str(k) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']'])
-                        nb_var += 1
 
         ## AUXILIARY VARIABLES
         # Distance between the previous price and next price
         for i in range(self.I + 1):
             if i > 0:
-                nb_var += 1
                 model.variables.add(obj = [1.0],
                                     types = [model.variables.type.continuous],
                                     lb = [-cplex.infinity], ub = [cplex.infinity],
                                     names = ['a[' + str(i) + ']'])
-                nb_var += 1
                 model.variables.add(obj = [1.0],
                                     types = [model.variables.type.continuous],
                                     lb = [-cplex.infinity], ub = [cplex.infinity],
                                     names = ['b[' + str(i) + ']'])
             else:
-                nb_var += 1
                 model.variables.add(types = [model.variables.type.continuous],
                                     lb = [-cplex.infinity], ub = [cplex.infinity],
                                     names = ['a[' + str(i) + ']'])
-                nb_var += 1
                 model.variables.add(types = [model.variables.type.continuous],
                                     lb = [-cplex.infinity], ub = [cplex.infinity],
                                     names = ['b[' + str(i) + ']'])
@@ -228,8 +214,7 @@ class Fixed_Point:
 
         # Linearized revenue after
         for k in range(1, self.K + 1):
-            model.variables.add(obj = [-0.02],
-                                types = [model.variables.type.continuous],
+            model.variables.add(types = [model.variables.type.continuous],
                                 lb = [-cplex.infinity], ub = [cplex.infinity],
                                 names = ['linRevenueAft[' + str(k) + ']'])
 
@@ -318,33 +303,26 @@ class Fixed_Point:
 
         ## Utility function of the operator (revenue)
         # BEFORE
-        for k in range(1, self.K + 1):
-            indices = ['revenue[' + str(k) + ']']
-            coefs = [1.0]
-            for i in range(self.I + 1):
-                if self.operator[i] == k:
-                    for n in range(self.N):
-                        for r in range(self.R):
-                            indices.append('alpha[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']')
-                            coefs.append(-1.0/self.R)
-            model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                         senses = 'E',
-                                         rhs = [0.0])
 
         # AFTER
         for k in range(1, self.K + 1):
             for l in range(self.n_price_levels):
                 indices = ['revenueAft[' + str(k) + ']' + '[' + str(l) + ']']
                 coefs = [1.0]
+                rhs = 0.0
                 for i in range(self.I + 1):
                     if self.operator[i] == k:
+                        if self.fixed_cost is not None:
+                            rhs += -self.fixed_cost[i]
                         for n in range(self.N):
                             for r in range(self.R):
                                 indices.append('wAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']')
+                                if self.customer_cost is not None:
+                                    coefs.append((-1.0*self.p[i, l]+self.fixed_cost[i])/self.R)
                                 coefs.append(-1.0*self.p[i, l]/self.R)
                 model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                              senses = 'E',
-                                             rhs = [0.0])
+                                             rhs = [rhs])
 
         ## The selected strategy is the one giving the highest revenue
         # AFTER (best response)
@@ -395,14 +373,27 @@ class Fixed_Point:
             for n in range(self.N):
                 for r in range(self.R):
                     for l in range(self.n_price_levels):
-                        indices = []
-                        coefs = []
-                        for i in range(self.I + 1):
-                            indices.append('wAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']')
-                            coefs.append(1.0)
-                        model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                                     senses = 'E',
-                                                     rhs = [1.0])
+                        # If the preprocessing worked :
+                        # Replace the 4 'Final configuration' constraints by the following one
+                        if (self.wAft_precomputed is not None) and (self.wAft_precomputed[k, 0, n ,r, l] is not None):
+                            print('Precomputed : wAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']')
+                            for i in range(self.I + 1):
+                                indices = []
+                                coefs = []
+                                indices.append('wAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']')
+                                coefs.append(1.0)
+                                model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                             senses = 'E',
+                                                             rhs = [self.wAft_precomputed[k, i, n, r, l]])
+                        else:
+                            indices = []
+                            coefs = []
+                            for i in range(self.I + 1):
+                                indices.append('wAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']')
+                                coefs.append(1.0)
+                            model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                         senses = 'E',
+                                                         rhs = [1.0])
 
         # Utility function
         # BEFORE
@@ -422,20 +413,22 @@ class Fixed_Point:
                 for n in range(self.N):
                     for r in range(self.R):
                         for l in range(self.n_price_levels):
-                            if self.operator[i] == k:
-                                indices = ['UAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']']
-                                coefs = [1.0]
-                                model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                                             senses = 'E',
-                                                             rhs = [self.exo_utility[i, n] + self.endo_coef[i, n] * self.p[i, l] + self.xi[i, n, r]])
-                            else:
-                                indices = ['UAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']',
-                                           'U[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
-                                coefs = [1.0,
-                                         -1.0]
-                                model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                                             senses = 'E',
-                                                             rhs = [0.0])
+                            # If wAft is precomputed, no need to add the constraint
+                            if not((self.wAft_precomputed is not None) and (self.wAft_precomputed[k, i, n ,r, l] is not None)):
+                                if self.operator[i] == k:
+                                    indices = ['UAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']']
+                                    coefs = [1.0]
+                                    model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                                 senses = 'E',
+                                                                 rhs = [self.exo_utility[i, n] + self.endo_coef[i, n] * self.p[i, l] + self.xi[i, n, r]])
+                                else:
+                                    indices = ['UAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']',
+                                               'U[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
+                                    coefs = [1.0,
+                                             -1.0]
+                                    model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                                 senses = 'E',
+                                                                 rhs = [0.0])
 
         # Utility-choice constraints
         # The selected alternative is the one with maximum discounted utility
@@ -463,19 +456,21 @@ class Fixed_Point:
                 for n in range(self.N):
                     for r in range(self.R):
                         for l in range(self.n_price_levels):
-                            indices = ['UAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']',
-                                       'UmaxAft[' + str(k) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']']
-                            coefs = [1.0, -1.0]
-                            model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                                         senses = 'L',
-                                                         rhs = [0.0])
-                            indices = ['UmaxAft[' + str(k) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']',
-                                       'UAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']',
-                                       'wAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']']
-                            coefs = [1.0, -1.0, self.M_U[n, r]]
-                            model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                                         senses = 'L',
-                                                         rhs = [self.M_U[n, r]])
+                            # If wAft is precomputed, no need to add the constraint
+                            if not((self.wAft_precomputed is not None) and (self.wAft_precomputed[k, i, n ,r, l] is not None)):
+                                indices = ['UAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']',
+                                           'UmaxAft[' + str(k) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']']
+                                coefs = [1.0, -1.0]
+                                model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                             senses = 'L',
+                                                             rhs = [0.0])
+                                indices = ['UmaxAft[' + str(k) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']',
+                                           'UAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']',
+                                           'wAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']']
+                                coefs = [1.0, -1.0, self.M_U[n, r]]
+                                model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                             senses = 'L',
+                                                             rhs = [self.M_U[n, r]])
 
         # Auxiliary constraints to calculate the demands (not part of the model)
         # BEFORE
@@ -620,12 +615,12 @@ if __name__ == '__main__':
     # Get the data and preprocess
     dict = data_file.getData()
     data_file.preprocess(dict)
-    t_1 = time.time()
     #data_file.preprocess2(dict)
+    t_1 = time.time()
     # Instanciate a Stackelberg game and solve it
     game = Fixed_Point(**dict)
     model = game.getModel()
-    model.write('FIXED_POINT_TEST.lp')
+    model.write('TEST_PRECOMP_MODEL.lp')
     print('MODEL COMPUTED')
     t_2 = time.time()
     game.solveModel(model)
