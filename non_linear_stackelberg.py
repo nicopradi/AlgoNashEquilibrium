@@ -11,25 +11,26 @@ import ipopt
 # numpy
 import numpy as np
 # data
-import Data.Non_linear_Stackelberg.ProbLogit_n10 as data_file
+import Data.Non_linear_Stackelberg.ProbMixedLogit_n5r50 as data_file
 
 class Stackelberg(object):
     def __init__(self, **kwargs):
         ''' Construct a non linear Stackelberg game.
             KeywordArgs:
-                I                 Number of alternatives
-                N                 Number of customers
-                endo_coef         Beta coefficient of the endogene variables
-                exo_utility       Value of the utility for the exogene variables
+                I                 Number of alternatives [int]
+                N                 Number of customers [int]
+                endo_coef         Beta coefficient of the endogene variables [list]
+                exo_utility       Value of the utility for the exogene variables [list]
                 #### Optional kwargs ####
-                optimizer         Index of the current operator
-                operator          Mapping between alternative and operators
-                p_fixed           Fixed price of the alternatives managed by other operators
-                y_fixed           Fixed availability of the alternatives managed by other operators
-                previous_revenue  Revenue of the current optimizer before its best reponse strategy
+                optimizer         Index of the operator playing its best reponse strategy [int]
+                operator          Mapping between alternative and operators [list]
+                p_fixed           Fixed price of the alternatives managed by other operators [list]
+                y_fixed           Fixed availability of the alternatives managed by other operators [list]
                 capacity          Capacity value for each alternative [list]
-                priority_list     Priority list for each alternative
-                R_coef            Number of draws for the coefficient
+                priority_list     Priority list for each alternative [list]
+                R_coef            Number of draws for the beta coefficient [int]
+                fixed_cost        Initial cost of an alternative [list]
+                customer_cost     Additional cost of an alternative for each addition customer [list]
         '''
         # Keyword arguments
         self.I = kwargs.get('I')
@@ -41,16 +42,18 @@ class Stackelberg(object):
         self.operator = kwargs.get('operator', None)
         self.p_fixed = kwargs.get('p_fixed', None)
         self.y_fixed = kwargs.get('y_fixed', None)
-        self.previous_revenue = kwargs.get('previous_revenue', 0.0)
-        # Optional capacity constraints
         self.capacity = kwargs.get('capacity', None)
         self.priority_list = kwargs.get('priority_list', None)
-        # Optimial argument (Mixed logit or logit)
+        # R_coef determines the DCM: Mixed logit or Logit
         self.R_coef = kwargs.get('R_coef', None)
+        self.fixed_cost = kwargs.get('fixed_cost', None)
+        self.customer_cost = kwargs.get('customer_cost', None)
 
-        ### Mapping
-        # Price variables
+        ### Mapping between decision variable and an index value
+        # Variable used to assign an index to a variable
         current_index = 0
+
+        # Price variables
         self.p = np.empty(self.I + 1, dtype = int)
         for i in range(len(self.p)):
             self.p[i] = current_index
@@ -90,31 +93,45 @@ class Stackelberg(object):
                     current_index += 1
 
     def objective(self, x):
-        ''' The callback for calculating the objective
-            This is a minimization problem.
+        ''' The callback for calculating the objective function.
+            Note that this is a minimization problem.
         '''
         expression = 0.0
+        # Add revenue to the objective function
         for i in range(self.I + 1):
-            # self.optimizer if None if and only if there is one operator
+            # Consider the alternatives managed by the optimizer only
             if (self.optimizer is None) or (self.operator[i] == self.optimizer):
                 for n in range(self.N):
                     # Note that this is a minimization problem.
                     expression += -(x[self.p[i]] * x[self.w[i, n]])
 
+        # Add the initial cost and customer cost
+        if self.fixed_cost is not None:
+            for i in range(1, self.I + 1):
+                if (self.optimizer is None) or (self.operator[i] == self.optimizer):
+                    # Initial cost
+                    expression += self.fixed_cost[i]
+                    # Customer cost
+                    if self.customer_cost is not None:
+                        for n in range(self.N):
+                            expression += self.customer_cost[i] * x[self.w[i, n]]
+
         return expression
 
     def gradient(self, x):
-        ''' The callback for calculating the gradient.
+        ''' The callback for calculating the gradient of the objective function.
         '''
         gradient = []
-        # Price variables
+
+        ### Price variables
         for i in range(len(self.p)):
             expression = 0.0
             if (self.optimizer is None) or (self.operator[i] == self.optimizer):
                 for n in range(len(self.w[i])):
                     expression += -x[self.w[i, n]]
             gradient.append(expression)
-        # Utility variables
+
+        ### Utility variables
         if self.R_coef is None:
             for i in range(len(self.U)):
                 for n in range(len(self.U[i])):
@@ -124,14 +141,19 @@ class Stackelberg(object):
                 for n in range(len(self.U[i])):
                     for r in range(len(self.U[i, n])):
                         gradient.append(0.0)
-        # Choice variables
+
+        ### Choice variables
         for i in range(len(self.w)):
             for n in range(len(self.w[i])):
                 if (self.optimizer is None) or (self.operator[i] == self.optimizer):
-                    gradient.append(-x[self.p[i]])
+                    if self.customer_cost is not None:
+                        gradient.append(-x[self.p[i]] + self.customer_cost[i])
+                    else:
+                        gradient.append(-x[self.p[i]])
                 else:
                     gradient.append(0.0)
-        # Availability variables
+
+        ### Availability variables
         if self.capacity is not None:
             for i in range(len(self.y)):
                 for n in range(len(self.y[i])):
@@ -140,16 +162,17 @@ class Stackelberg(object):
         return np.asarray(gradient)
 
     def constraints(self, x):
-        ''' The callback for calculating the constraints.
+        ''' The callback for defining the constraints.
         '''
         constraints = []
-        # Probabilistic choice
+
+        ### Probabilistic choice constraints
         for i in range(len(self.w)):
             for n in range(len(self.w[i])):
                 expression = 0.0
-                # Check if alternative's capacity are given
+                # Uncapacitated model
                 if self.capacity is not None:
-                    # Check if we are given the logit or mixed logit model
+                    # Check if the DCM is the Logit or Mixed logit model
                     if self.R_coef is None:
                         # Logit
                         numerator = float(np.exp(x[self.U[i, n]]) * x[self.y[i, n]])
@@ -168,7 +191,7 @@ class Stackelberg(object):
                             sum += (numerator/denominator)
                         sum = sum/self.R_coef
                         expression = x[self.w[i, n]] - sum
-
+                # Capacitated model
                 else:
                     if self.R_coef is None:
                         numerator = float(np.exp(x[self.U[i, n]]))
@@ -189,7 +212,7 @@ class Stackelberg(object):
 
                 constraints.append(expression)
 
-        # Utility value
+        ### Utility value constraints
         if self.R_coef is None:
             # Logit
             for i in range(len(self.U)):
@@ -205,14 +228,14 @@ class Stackelberg(object):
                         constraints.append(expression)
 
 
-        # Fixed prices
+        ### Fixed prices constraints
         if (self.optimizer is not None):
             for i in range(len(self.p)):
                 if self.operator[i] != self.optimizer:
                     expression = x[self.p[i]] - self.p_fixed[i]
                     constraints.append(expression)
 
-        # Capacity constraints
+        ### Capacity constraints
         if self.capacity is not None:
             # Ensure that y is a binary variable
             for i in range(len(self.y)):
@@ -251,15 +274,17 @@ class Stackelberg(object):
         return constraints
 
     def jacobian(self, x):
-        ''' The callback for calculating the Jacobian.
+        ''' The callback for calculating the Jacobian. For each constraint,
+            compute the partial derivative for each variable.
         '''
         jacobian = []
+        # Schema:
         # For each constraint
             # For each variable
                 # Append value to jacobian
 
         ### Probabilistic choice constraints
-        # For each constraint
+        # For each constraints
         for i in range(len(self.w)):
             for n in range(len(self.w[i])):
                 # For each variable
@@ -268,36 +293,29 @@ class Stackelberg(object):
                     jacobian.append(0.0)
                 # Utility variables
                 if self.R_coef is None:
+                    # Logit
                     for j in range(len(self.U)):
                         for m in range(len(self.U[j])):
                             if m != n:
                                 expression = 0.0
                             elif i == j:
                                 if self.capacity is None:
-                                    sum = 0
-                                    # TODO: Put the sum in the outer loop to reduce running time, replace by np.sum
-                                    for k in range(len(self.U)):
-                                        sum += np.exp(x[self.U[k, n]])
+                                    sum = np.sum([np.exp(x[self.U[k, m]]) for k in range(len(self.U))])
                                     expression = -(np.exp(x[self.U[j, m]])*sum - np.exp(x[self.U[j, m]])**2)/(sum**2)
                                 else:
-                                    sum = 0
-                                    for k in range(len(self.U)):
-                                        sum += (np.exp(x[self.U[k, m]])*x[self.y[k, m]])
+                                    sum = np.sum([np.exp(x[self.U[k, m]])*x[self.y[k, m]] for k in range(len(self.U))])
                                     expression = -(np.exp(x[self.U[j, m]])*x[self.y[j, m]]*sum - (np.exp(x[self.U[j, m]])*x[self.y[j, m]])**2)/(sum**2)
                             else:
                                 expression = 0.0
                                 if self.capacity is None:
-                                    sum = 0
-                                    for k in range(len(self.U)):
-                                        sum += np.exp(x[self.U[k, m]])
+                                    sum = np.sum([np.exp(x[self.U[k, m]]) for k in range(len(self.U))])
                                     expression = (np.exp(x[self.U[i, m]])*np.exp(x[self.U[j, m]]))/(sum*sum)
                                 else:
-                                    sum = 0
-                                    for k in range(len(self.U)):
-                                        sum += (np.exp(x[self.U[k, m]])*x[self.y[k, m]])
+                                    sum = np.sum([np.exp(x[self.U[k, m]])*x[self.y[k, m]] for k in range(len(self.U))])
                                     expression = (np.exp(x[self.U[i, m]])*np.exp(x[self.U[j, m]])*x[self.y[i, m]]*x[self.y[j, m]])/(sum**2)
                             jacobian.append(expression)
                 else:
+                    # Mixed logit
                     for j in range(len(self.U)):
                         for m in range(len(self.U[j])):
                             for r in range(len(self.U[j, m])):
@@ -307,26 +325,22 @@ class Stackelberg(object):
                                     expression = 0.0
                                     if self.capacity is None:
                                         for s in range(len(self.U[j, m])):
-                                            sum = np.sum([np.exp(x[self.U[k, n, s]]) for k in range(len(self.U))])
+                                            sum = np.sum([np.exp(x[self.U[k, m, s]]) for k in range(len(self.U))])
                                             expression += -(np.exp(x[self.U[j, m, s]])*sum - np.exp(x[self.U[j, m, s]])**2)/(sum**2)
                                     else:
                                         for s in range(len(self.U[j, m])):
-                                            sum = np.sum([np.exp(x[self.U[k, n, s]])*x[self.y[k, m]] for k in range(len(self.U))])
+                                            sum = np.sum([np.exp(x[self.U[k, m, s]])*x[self.y[k, m]] for k in range(len(self.U))])
                                             expression += -(np.exp(x[self.U[j, m, s]])*x[self.y[j, m]]*sum - (np.exp(x[self.U[j, m, s]])*x[self.y[j, m]])**2)/(sum**2)
                                     expression = expression/float(self.R_coef)
                                 else:
                                     expression = 0.0
                                     if self.capacity is None:
                                         for s in range(len(self.U[j, m])):
-                                            sum = 0
-                                            for k in range(len(self.U)):
-                                                sum += np.exp(x[self.U[k, m, s]])
+                                            sum = np.sum([np.exp(x[self.U[k, m, s]]) for k in range(len(self.U))])
                                             expression += (np.exp(x[self.U[i, m, s]])*np.exp(x[self.U[j, m, s]]))/(sum**2)
                                     else:
                                         for s in range(len(self.U[j, m])):
-                                            sum = 0
-                                            for k in range(len(self.U)):
-                                                sum += (np.exp(x[self.U[k, m, s]])*x[self.y[k, m]])
+                                            sum = np.sum([np.exp(x[self.U[k, m, s]])*x[self.y[k, m]] for k in range(len(self.U))])
                                             expression += (np.exp(x[self.U[i, m, s]])*np.exp(x[self.U[j, m, s]])*x[self.y[i, m]]*x[self.y[j, m]])/(sum**2)
                                     expression = expression/float(self.R_coef)
                                 jacobian.append(expression)
@@ -341,41 +355,34 @@ class Stackelberg(object):
                 # Availability variables
                 if self.capacity is not None:
                     if self.R_coef is None:
+                        # Logit
                         for j in range(len(self.y)):
                             for m in range(len(self.y[j])):
                                 if (j == i) and (n == m):
-                                    sum = 0
-                                    for k in range(len(self.y)):
-                                        sum += (np.exp(x[self.U[k, m]])*x[self.y[k, m]])
+                                    sum = np.sum([np.exp(x[self.U[k, m]])*x[self.y[k, m]] for k in range(len(self.y))])
                                     expression = -(np.exp(x[self.U[i, n]])*sum - x[self.y[i, n]]*(np.exp(x[self.U[i, n]])**2))/(sum**2)
                                 elif (n == m):
-                                    sum = 0
-                                    for k in range(len(self.y)):
-                                        sum += (np.exp(x[self.U[k, m]])*x[self.y[k, m]])
+                                    sum = np.sum([np.exp(x[self.U[k, m]])*x[self.y[k, m]] for k in range(len(self.y))])
                                     expression = np.exp(x[self.U[i, n]])*x[self.y[i, n]]*np.exp(x[self.U[j, n]])/(sum**2)
                                 else:
                                     expression = 0.0
                                 jacobian.append(expression)
                     else:
+                        # Mixed logit
                         for j in range(len(self.y)):
                             for m in range(len(self.y[j])):
                                 if (j == i) and (n == m):
                                     for s in range(len(self.U[j, m])):
-                                        sum = 0
-                                        for k in range(len(self.y)):
-                                            sum += (np.exp(x[self.U[k, m, s]])*x[self.y[k, m]])
+                                        sum = np.sum([np.exp(x[self.U[k, m, s]])*x[self.y[k, m]] for k in range(len(self.y))])
                                         expression += -(np.exp(x[self.U[i, n, s]])*sum - x[self.y[i, n]]*(np.exp(x[self.U[i, n, s]])**2))/(sum**2)
                                 elif (n == m):
                                     for s in range(len(self.U[j, m])):
-                                        sum = 0
-                                        for k in range(len(self.y)):
-                                            sum += (np.exp(x[self.U[k, m, s]])*x[self.y[k, m]])
+                                        sum = np.sum([np.exp(x[self.U[k, m, s]])*x[self.y[k, m]] for k in range(len(self.y))])
                                         expression += np.exp(x[self.U[i, n, s]])*x[self.y[i, n]]*np.exp(x[self.U[j, n, s]])/(sum**2)
                                 else:
                                     expression = 0.0
                                 expression = expression/float(self.R_coef)
                                 jacobian.append(expression)
-
 
         #### Utility value constraints
         if self.R_coef is None:
@@ -586,7 +593,7 @@ class Stackelberg(object):
             #### Priority list, if y[i, n] is 1 then there is free room for n to choose alternative i
             for i in range(1, self.I + 1):
                 for n in range(self.N):
-                    # This type of constraint is revelant only if the capacity could be exceeded
+                    # This type of constraint is revelant only if the capacity can be exceeded
                     if self.priority_list[i, n] > self.capacity[i]:
                         # For each variable
                         # Price variables
@@ -619,12 +626,14 @@ class Stackelberg(object):
 
         return jacobian
 
-def main(data):
+def main(data, tol=1e-3):
     ''' Define the problem.
+        Args:
+            data     data for the MINLP Stackelberg formulation [dict]
+            tol      tolerance used for IPOPT solver [float]
     '''
 
-    x0 = []
-    # Lower bound and upper bound on the decision variables
+    ### Define the lower and upper bounds on the decision variables
     lb = []
     ub = []
     # Price variables
@@ -656,17 +665,17 @@ def main(data):
                 ub.append(1.0)
 
     # x0 is the starting point of the interior point method
-    # Start from the previous operator's strategies if given
+    # Start from the previous solution if given
     if 'x0' in data.keys():
-        x0 = copy.deepcopy(data['x0'])
+        # Pass the previous solution to the getInitial point method to polish it
+        # It avoids numerical error
+        x0 = getInitialPoint(data, previous_solution=data['x0'])
     else:
         x0 = getInitialPoint(data)
 
-    # Lower bound and upper bound on the constraints
+    ### Define the lower and upper bound on the constraints
     cl = []
     cu = []
-    #TODO: Adjust tolerance value, make it a keyword argument
-    tol = 1e-4
     # Probabilistic choice constraints
     for i in range(data['I'] + 1):
         for n in range(data['N']):
@@ -674,13 +683,14 @@ def main(data):
             cu.append(tol)
     # Utility value constraints
     if 'R_coef' in data.keys():
-    # Mixed logit
+        # Mixed logit
         for i in range(data['I'] + 1):
             for n in range(data['N']):
                 for r in range(data['R_coef']):
                     cl.append(-tol)
                     cu.append(tol)
     else:
+        # Logit
         for i in range(data['I'] + 1):
             for n in range(data['N']):
                 cl.append(-tol)
@@ -691,7 +701,7 @@ def main(data):
             if data['operator'][i] != data['optimizer']:
                 cl.append(-tol)
                 cu.append(tol)
-    # capacity constraints
+    # Capacity constraints
     if 'capacity' in data.keys():
         # Ensure that y is a binary variable
         for i in range(data['I'] + 1):
@@ -719,6 +729,7 @@ def main(data):
                     cl.append(-data['N'] - 1.0 - tol)
                     cu.append(tol)
 
+    # Initialize IPOPT problem
     nlp = ipopt.problem(
                 n=len(x0),
                 m=len(cl),
@@ -728,9 +739,18 @@ def main(data):
                 cl=cl,
                 cu=cu
                 )
-    # Set the parameters
-    #nlp.addOption('print_level', 0)
+
+    # Set the parameters of IPOPT solver
+    # Documentation about the IPOPT parameters:
+    # https://www.coin-or.org/Ipopt/documentation/node40.html
+
+    # Do not print the solver's output
+    nlp.addOption('print_level', 0)
+    # Maximum number of iterations
     nlp.addOption('max_iter', 1500)
+    # Set up a warm start to a x0
+    # Explanation:
+    # http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.589.5002&rep=rep1&type=pdf
     nlp.addOption('warm_start_init_point', 'yes')
     nlp.addOption('warm_start_bound_push', 1e-19)
     nlp.addOption('warm_start_bound_frac', 1e-19)
@@ -738,45 +758,59 @@ def main(data):
     nlp.addOption('warm_start_slack_bound_push', 1e-19)
     nlp.addOption('warm_start_mult_bound_push', 1e-19)
     # Check for invalid derivative information
-    nlp.addOption('check_derivatives_for_naninf', 'yes')
-    # Set the tolerance of value
-    nlp.addOption('acceptable_tol', 1e-3)
-    #nlp.addOption('constr_viol_tol', tol)
-    # Solve the problem
+    #nlp.addOption('check_derivatives_for_naninf', 'yes')
+    # Set the acceptable tolerance
+    nlp.addOption('acceptable_tol', tol)
+    nlp.addOption('tol', tol)
+    nlp.addOption('constr_viol_tol', tol)
+
+    ### Solve the IPOPT problem
     x, info = nlp.solve(x0)
 
     # Change the sign of the optimal objective function value
     # (conversion of a minimization problem to a maximization)
     info['obj_val'] = -info['obj_val']
+
     # Print the solution
     printSolution(data, x, info)
+    # Get the index of the choice variables
     choice_start = data['I'] + 1 + data['N']*(data['I'] + 1)
     choice_end = data['I'] + 1 + 2*data['N']*(data['I'] + 1)
 
+    # Return the price, choice, whole solution and info variables
     return x[:data['I'] + 1], x0[choice_start:choice_end], x, info['status'], info['status_msg']
 
-def getInitialPoint(data):
+def getInitialPoint(data, previous_solution=None):
     ''' Compute an initial feasible solution to the best response game.
         The initial solution of the interior point algorithm will be set at this
         solution.
+        If a previous solution is given, polish it.
+        Args:
+            data                data for the MINLP Stackelberg formulation [dict]
+            previous_solution   solution of the previous iterative of the sequential game
     '''
 
-    print('\n--- Compute an initial x0 ----')
-
+    print('\n--- Compute an feasible solution x0 ----')
     x0 = []
+    # count is used to keep track of the variable index
     count = 0
+
     # Price variables
     p_index = np.empty([data['I'] + 1], dtype = int)
     for i in range(data['I'] + 1):
-        if data['operator'][i] != data['optimizer']:
+        if 'operator' in data.keys() and data['operator'][i] != data['optimizer']:
             x0.append(data['p_fixed'][i])
         else:
-            x0.append((data['ub_p'][i]+data['lb_p'][i])/2.0)
+            if previous_solution is not None:
+                x0.append(previous_solution[i])
+            else:
+                x0.append((data['ub_p'][i]+data['lb_p'][i])/2.0)
         p_index[i] = count
         count += 1
 
     # Utility variables
     if 'R_coef' in data.keys():
+        # Mixed Logit
         u_index = np.empty([data['I'] + 1, data['N'], data['R_coef']], dtype = int)
         for i in range(data['I'] + 1):
             for n in range(data['N']):
@@ -785,6 +819,7 @@ def getInitialPoint(data):
                     u_index[i, n, r] = count
                     count += 1
     else:
+        # Logit
         u_index = np.empty([data['I'] + 1, data['N']], dtype = int)
         for i in range(data['I'] + 1):
             for n in range(data['N']):
@@ -792,19 +827,18 @@ def getInitialPoint(data):
                 u_index[i, n] = count
                 count += 1
 
-
-    # Compute choice variables and availability variables
-    # according to whether capacities are given
+    # Choice variables and Availability variables
+    # TODO: Explain how they are computed
     if 'capacity' in data.keys():
-        # Initialize the value of the variables in x0
-        # Choice variables
+        # Capacitated model
+        # Initiial Choice variables
         w_index = np.empty([data['I'] + 1, data['N']], dtype = int)
         for i in range(data['I'] + 1):
             for n in range(data['N']):
                 x0.append(1.0)
                 w_index[i, n] = count
                 count += 1
-        # Availability variables
+        # Initial Availability variables
         y_index = np.empty([data['I'] + 1, data['N']], dtype = int)
         for i in range(data['I'] + 1):
             for n in range(data['N']):
@@ -812,7 +846,7 @@ def getInitialPoint(data):
                 y_index[i, n] = count
                 count += 1
 
-        # Compute the choice and availability variables until convergence to a feasible solution
+        # Adjust the choice and availability variables until convergence to a feasible solution
         feasible = False
         while feasible is False:
             # Choice variables
@@ -853,6 +887,7 @@ def getInitialPoint(data):
                         x0[y_index[i, n]] = 0.0
 
     else:
+        # Uncapacitated
         # Choice variables
         w_index = np.empty([data['I'] + 1, data['N']], dtype = int)
         for i in range(data['I'] + 1):
@@ -883,31 +918,26 @@ def printSolution(data, x, info):
     print('\nResults:')
     print('Decision variables: \n')
     # Price variables
-    counter = 0
     for i in range(data['I'] + 1):
         print('Price of alternative %r: %r'%(i, x[counter]))
-        counter += 1
     print('\n')
     '''
     # Utility variables
     for i in range(data['I'] + 1):
         for n in range(data['N']):
             print('Utility of alternative %r for user %r : %r'%(i, n, x[counter]))
-            counter += 1
     print('\n')
     #TODO: Compute the revenue/market share
     # Choice variables
     for i in range(data['I'] + 1):
         for n in range(data['N']):
             print('Choice of alternative %r for user %r : %r'%(i, n, x[counter]))
-            counter += 1
     print('\n')
     # Availability variables
     if 'capacity' in data.keys():
         for i in range(data['I'] + 1):
             for n in range(data['N']):
                 print('Availability of alternative %r for user %r : %r'%(i, n, x[counter]))
-                counter += 1
         print('\n')
     '''
     print("Objective function(revenue) = %r\n" % info['obj_val'])
@@ -919,5 +949,5 @@ if __name__ == '__main__':
     data_file.preprocess(data)
     # Solve the non linear model
     t0 = time.time()
-    main(data)
+    main(data, tol)
     print('Total running time: %r ' %(time.time() - t0))

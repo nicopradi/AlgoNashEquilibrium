@@ -9,38 +9,37 @@ from cplex.exceptions import CplexSolverError
 # numpy
 import numpy as np
 # data
-import Data.Stackelberg.MILPLogit_n10r050 as data_file
+import Data.Stackelberg.MILPLogit_n10r100 as data_file
 
 class Stackelberg:
 
     def __init__(self, **kwargs):
         ''' Construct a Stackelberg game
             KeywordArgs:
-                I               Number of alternatives
-                N               Number of customers
-                R               Number of draws
-                choice_set       Individual choice sets
-                capacity        Maximum capacity for each alternative
-                priority_list    Priority list for each alternative
-                lb_p            Lower bound on price for each alternatives
-                ub_p            Upper bound on price for each alternatives
-                lb_U            Lower bound on utility for each alternative and customer
-                ub_U            Upper bound on utility for each alternative and customer
-                lb_Umin         Lower bound on utility for each customer
-                ub_Umax         Upper bound on utility for each customer
-                M               Big M value for each customer
-                exo_utility      Value of the utility for the exogene variables
-                endo_coef        Beta coefficient of the endogene variables
-                xi              Error term values
+                I               Number of alternatives [int]
+                N               Number of customers [int]
+                R               Number of draws [int]
+                choice_set      Individual choice sets [list]
+                capacity        Maximum capacity for each alternative [list]
+                priority_list   Priority list for each alternative [list]
+                lb_p            Lower bound on price for each alternatives [list]
+                ub_p            Upper bound on price for each alternatives [list]
+                lb_Umin         Lower bound on utility for each customer [list]
+                ub_Umax         Upper bound on utility for each customer [list]
+                M               Big M value for each customer [list]
+                exo_utility     Value of the utility for the exogene variables [list]
+                endo_coef       Beta coefficient of the endogene variables [list]
+                xi              Error term values [list]
                 #### Optional kwargs ####
-                operator        Mapping between alternative and operators
-                optimizer       Index of the current operator
-                p_fixed         Fixed price of the alternatives managed by other operators
-                y_fixed         Fixed availability of the alternatives managed by other operators
+                operator        Mapping between alternative and operators [int]
+                optimizer       Index of the current operator [list]
+                p_fixed         Fixed price of the alternatives managed by other operators [list]
+                y_fixed         Fixed availability of the alternatives managed by other operators [list]
+                fixed_cost      Initial cost of an alternative [list]
+                customer_cost   Additional cost of an alternative for each addition customer [list]
 
         '''
-        ## TODO: Add kwargs for capacity/no capacity, continuous price/discrete price
-        ## TODO: Check correctness of the attributes value
+        ## TODO: Check correctness of the attributes value ?
         self.I = kwargs.get('I', 2)
         self.N = kwargs.get('N', 10)
         self.R = kwargs.get('R', 50)
@@ -49,8 +48,6 @@ class Stackelberg:
         self.priority_list = kwargs.get('priority_list', None)
         self.lb_p = kwargs.get('lb_p', np.zeros(self.I + 1))
         self.ub_p = kwargs.get('ub_p', np.zeros(self.I + 1))
-        self.lb_U = kwargs.get('lb_U')
-        self.ub_U = kwargs.get('ub_U')
         self.lb_Umin = kwargs.get('lb_Umin')
         self.ub_Umax = kwargs.get('ub_Umax')
         self.M = kwargs.get('M')
@@ -62,6 +59,8 @@ class Stackelberg:
         self.optimizer = kwargs.get('optimizer', None)
         self.p_fixed = kwargs.get('p_fixed', None)
         self.y_fixed = kwargs.get('y_fixed', None)
+        self.fixed_cost = kwargs.get('fixed_cost', None)
+        self.customer_cost = kwargs.get('customer_cost', None)
 
     def getModel(self):
         ''' Construct a CPLEX model corresponding the a Stackelberg game (1 leader,
@@ -69,32 +68,40 @@ class Stackelberg:
             Returns:
                 model          CPLEX model
         '''
-
-        model = cplex.Cplex() # Initialize the model
-        model.objective.set_sense(model.objective.sense.maximize) ## Set the objective function to maximization
+        # Initialize the model
+        model = cplex.Cplex()
+        # Set the objective function sense
+        model.objective.set_sense(model.objective.sense.maximize)
+        # Add the fixed cost to the objective function
+        if self.fixed_cost is not None:
+            initial_cost = 0.0
+            for i in range(1, self.I + 1):
+                if (self.optimizer is None) or (self.operator[i] == self.optimizer):
+                    # Alternative i is managed by the optimizer
+                    initial_cost += self.fixed_cost[i]
+            model.objective.set_offset(-initial_cost)
 
         ##### Add the decision variables #####
-
-        # Availability at scenario level, as a result of the choices of other customers
+        # Availability at scenario level variables
         for i in range(self.I + 1):
             for n in range(self.N):
                 for r in range(self.R):
                     model.variables.add(types = [model.variables.type.binary],
                                         names = ['y_scen[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']'])
 
-        # Availability at operator level
+        # Availability at operator level variables
         for i in range(self.I + 1):
             model.variables.add(types = [model.variables.type.binary],
                                 names = ['y[' + str(i) + ']'])
 
-        # Choice made by the customer
+        # Customer choice variables
         for i in range(self.I + 1):
             for n in range(self.N):
                 for r in range(self.R):
                     model.variables.add(types = [model.variables.type.binary],
                                         names = ['w[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']'])
 
-        # Utility
+        # Utility variables
         for i in range(self.I + 1):
             for n in range(self.N):
                 for r in range(self.R):
@@ -102,7 +109,7 @@ class Stackelberg:
                                         lb = [-cplex.infinity], ub = [cplex.infinity],
                                         names = ['U[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']'])
 
-        # Discounted utility based on choice availabily (y_scen)
+        # Discounted utility
         for i in range(self.I + 1):
             for n in range(self.N):
                 for r in range(self.R):
@@ -110,20 +117,20 @@ class Stackelberg:
                                         lb = [-cplex.infinity], ub = [cplex.infinity],
                                         names = ['z[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']'])
 
-        # Maximum discounted utility for each customer, each draw
+        # Maximum utility for each customer and draw
         for n in range(self.N):
             for r in range(self.R):
                 model.variables.add(types = [model.variables.type.continuous],
                                     lb = [-cplex.infinity], ub = [cplex.infinity],
                                     names = ['Umax[' + str(n) + ']' + '[' + str(r) + ']'])
 
-        # Continuous price
+        # Price variables
         for i in range(self.I + 1):
             model.variables.add(types = [model.variables.type.continuous],
                                lb = [-cplex.infinity], ub = [cplex.infinity],
                                names = ['p[' + str(i) + ']'])
 
-        # Linearized product choice-price
+        # Linearized choice-price variables
         for i in range(self.I + 1):
             for n in range(self.N):
                 for r in range(self.R):
@@ -138,14 +145,25 @@ class Stackelberg:
 
         # Auxiliary variable to calculate the demand
         for i in range(self.I + 1):
-            model.variables.add(types = [model.variables.type.continuous],
-                               lb = [-cplex.infinity], ub = [cplex.infinity],
-                               names = ['d[' + str(i) + ']'])
+            if self.customer_cost is not None:
+                # Add customer cost in the objective function
+                if (self.optimizer is None) or (self.operator[i] == self.optimizer):
+                    model.variables.add(obj = [-self.customer_cost[i]],
+                                       types = [model.variables.type.continuous],
+                                       lb = [-cplex.infinity], ub = [cplex.infinity],
+                                       names = ['d[' + str(i) + ']'])
+                else:
+                    model.variables.add(types = [model.variables.type.continuous],
+                                       lb = [-cplex.infinity], ub = [cplex.infinity],
+                                       names = ['d[' + str(i) + ']'])
+            else:
+                model.variables.add(types = [model.variables.type.continuous],
+                                   lb = [-cplex.infinity], ub = [cplex.infinity],
+                                   names = ['d[' + str(i) + ']'])
 
         ##### Add the constraints #####
 
-        ##### Fixed price/alternatives
-
+        ##### Fixed price and alternatives availability constraints
         # The price/availability of the alternatives not managed by the current optimizer are fixed
         if self.p_fixed is not None:
             for i in range(self.I + 1):
@@ -160,8 +178,8 @@ class Stackelberg:
                     model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                                  senses = 'E',
                                                  rhs = [self.y_fixed[i]])
-        ##### Choice Availability
 
+        ##### Choice and availabilty constraints
         # Each customer choose one alternative
         for n in range(self.N):
             for r in range(self.R):
@@ -174,7 +192,7 @@ class Stackelberg:
                                              senses = 'E',
                                              rhs = [1.0])
 
-        # Customer can only choose options that are available at scenario level
+        # Customer can only choose an option that is available at scenario level
         for i in range(self.I + 1):
             for n in range(self.N):
                 for r in range(self.R):
@@ -205,7 +223,7 @@ class Stackelberg:
                                              senses = 'E',
                                              rhs = [1.0])
 
-        # Alternative not available at scnerio level if not included in the choice_set
+        # Alternative not available at scenerio level if not included in the choice_set
         if self.choice_set is not None:
             for i in range(self.I + 1):
                 for n in range(self.N):
@@ -219,7 +237,8 @@ class Stackelberg:
 
         ##### Capacity constraints
         if self.capacity is not None:
-            for i in range(1, self.I + 1): # Do not consider opt-out
+            # Demand does not exceed capacity
+            for i in range(1, self.I + 1):
                 for r in range(self.R):
                     indices = []
                     coefs = []
@@ -232,12 +251,12 @@ class Stackelberg:
 
             # Priority list: if alternative not available at scenario level,
             # then the capacity is reached, or the alternative is not available in the choice set
-            for i in range(1, self.I + 1): # Do not consider opt-out
+            for i in range(1, self.I + 1):
                 for n in range(self.N):
                     for r in range(self.R):
                         indices = []
                         coefs = []
-                        # Sum of the customers which have priority
+                        # Sum of the customers choice which priority over n
                         for m in range(self.N):
                             if self.priority_list[i, m] < self.priority_list[i, n]:
                                 indices.append('w[' + str(i) + ']' + '[' + str(m) + ']' + '[' + str(r) + ']')
@@ -246,7 +265,6 @@ class Stackelberg:
                         coefs.append(self.capacity[i]*self.choice_set[i, n])
                         indices.append('y_scen[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']')
                         coefs.append(-self.capacity[i]*self.choice_set[i, n])
-                        # Add the constraint
                         model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                                      senses = 'L',
                                                      rhs = [0.0])
@@ -260,7 +278,7 @@ class Stackelberg:
                            (self.choice_set[i, n] == 1):
                            indices = []
                            coefs = []
-                           # Sum of the customers which have priority
+                           # Sum of the customers choice which have priority over n
                            for m in range(self.N):
                                if self.priority_list[i, m] < self.priority_list[i, n]:
                                    indices.append('w[' + str(i) + ']' + '[' + str(m) + ']' + '[' + str(r) + ']')
@@ -271,22 +289,20 @@ class Stackelberg:
                            model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                                         senses = 'L',
                                                         rhs = [self.priority_list[i, n] - 1.0])
-        #### Price-choice constraints
 
-        # Bound on price for each alternatives
+        #### Price constraints
+        # Bound on the price for each alternatives
         for i in range(self.I + 1):
             indices = ['p[' + str(i) + ']']
             coefs = [1.0]
-            # Lower bound constraint
             model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                          senses = 'G',
                                          rhs = [self.lb_p[i]])
-            # Upper bound constraint
             model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                          senses = 'L',
                                          rhs = [self.ub_p[i]])
 
-        # Linearized price-choice: alpha is 0 if alternative is not choosen
+        # Linearized price: alpha is equal to 0 if alternative is not choosen
         for i in range(self.I + 1):
             for n in range(self.N):
                 for r in range(self.R):
@@ -305,7 +321,7 @@ class Stackelberg:
                                                  senses = 'G',
                                                  rhs = [0.0])
 
-        # Linearized price-choice: alpha equals the price if alternative is choosen
+        # Linearized price: alpha is equal to the price if alternative is chosen
         for i in range(self.I + 1):
             for n in range(self.N):
                 for r in range(self.R):
@@ -325,64 +341,73 @@ class Stackelberg:
                                                  senses = 'L',
                                                  rhs = [0.0])
 
-        #### Utility function
+        #### Utility constraints
         for i in range(self.I + 1):
             for n in range(self.N):
                 for r in range(self.R):
                     indices = ['U[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
                                'p[' + str(i) + ']']
-                    coefs = [1.0, -self.endo_coef[i, n]]
-                    model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                                 senses = 'E',
-                                                 rhs = [self.exo_utility[i, n] + self.xi[i, n, r]])
+                    if len(self.endo_coef.shape) == 3:
+                        # Mixed logit
+                        coefs = [1.0, -self.endo_coef[i, n, r]]
+                        model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                     senses = 'E',
+                                                     rhs = [self.exo_utility[i, n, r] + self.xi[i, n, r]])
+                    else:
+                        # Logit
+                        coefs = [1.0, -self.endo_coef[i, n]]
+                        model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                     senses = 'E',
+                                                     rhs = [self.exo_utility[i, n] + self.xi[i, n, r]])
 
-        #### Discounted utility function
+        #### Discounted utility constraints
         if self.capacity is not None:
+            # Capacitated model
             for i in range(self.I + 1):
                 for n in range(self.N):
                     for r in range(self.R):
+                        # Discounted utility greater than utility lower bound
                         indices = ['z[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
                         coefs = [1.0]
-                        # Discounted utility greater than utility lower bound
                         model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                                      senses = 'G',
                                                      rhs = [self.lb_Umin[n, r]])
+                        # Discounted utility equal to utility lower bound if alternative not available
                         indices = ['z[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
                                    'y_scen[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
                         coefs = [1.0, -self.M[n, r]]
-                        # Discounted utility equal to utility lower bound if alternative not available
                         model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                                      senses = 'L',
                                                      rhs = [self.lb_Umin[n, r]])
+                        # Discounted utility equal to utility if alternative available
                         indices = ['U[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
                                    'y_scen[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
                                    'z[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
                         coefs = [1.0, self.M[n, r], -1.0]
-                        # Discounted utility equal to utility if alternative available
                         model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                                      senses = 'L',
                                                      rhs = [self.M[n, r]])
+                        # Discounted utility smaller than utility
                         indices = ['z[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
                                    'U[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
                         coefs = [1.0, -1.0]
-                        # Discounted utility greater than utility lower bound
                         model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                                      senses = 'L',
                                                      rhs = [0.0])
         else:
-            # Assume y = 1 for each alternative
+            # Uncapacitated model
             for i in range(self.I + 1):
                 for n in range(self.N):
                     for r in range(self.R):
                         indices = ['z[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
                                    'U[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
                         coefs = [1.0, -1.0]
-                        # Discounted utility greater than utility lower bound
+                        # Discounted utility equal to utility
                         model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                                      senses = 'E',
                                                      rhs = [0.0])
 
-        #### Utility-choice constraints
+        #### Utility maximization constraints
         # The selected alternative is the one with the highest utility
         for i in range(self.I + 1):
             for n in range(self.N):
@@ -401,7 +426,7 @@ class Stackelberg:
                                                  senses = 'L',
                                                  rhs = [self.M[n, r]])
 
-        #### Auxiliary constraints to compute the demands
+        #### Auxiliary constraints to compute the demand
         for i in range(self.I + 1):
             indices = []
             coefs = []
@@ -426,10 +451,11 @@ class Stackelberg:
         '''
         try:
             print("--SOLUTION : --")
+            # Do not print the solver output 
             #model.set_results_stream(None)
             #model.set_warning_stream(None)
             model.solve()
-            print(model.solution.get_objective_value())
+            print('Objective function value: %r' %model.solution.get_objective_value())
             for i in range(self.I +1):
                 print('Price of alt %r : %r' %(i, model.solution.get_values('p[' + str(i) + ']')))
             return model
