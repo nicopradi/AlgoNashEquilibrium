@@ -917,27 +917,32 @@ def printSolution(data, x, info):
 
     print('\nResults:')
     print('Decision variables: \n')
+    counter = 0
     # Price variables
     for i in range(data['I'] + 1):
         print('Price of alternative %r: %r'%(i, x[counter]))
+        counter += 1
     print('\n')
     '''
     # Utility variables
     for i in range(data['I'] + 1):
         for n in range(data['N']):
             print('Utility of alternative %r for user %r : %r'%(i, n, x[counter]))
+            counter += 1
     print('\n')
     #TODO: Compute the revenue/market share
     # Choice variables
     for i in range(data['I'] + 1):
         for n in range(data['N']):
             print('Choice of alternative %r for user %r : %r'%(i, n, x[counter]))
+            counter += 1
     print('\n')
     # Availability variables
     if 'capacity' in data.keys():
         for i in range(data['I'] + 1):
             for n in range(data['N']):
                 print('Availability of alternative %r for user %r : %r'%(i, n, x[counter]))
+                counter += 1
         print('\n')
     '''
     print("Objective function(revenue) = %r\n" % info['obj_val'])
