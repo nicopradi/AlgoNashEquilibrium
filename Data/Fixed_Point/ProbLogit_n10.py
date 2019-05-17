@@ -29,7 +29,10 @@ def getData():
 
     dict['n_price_levels'] = 10
 
-    dict['capacity'] = np.array([60.0, 20.0, 20.0]) # Availability for each alternative (opt-out always available)
+    #dict['capacity'] = np.array([60.0, 60.0, 60.0]) # Availability for each alternative (opt-out always available)
+
+    #dict['fixed_cost'] = [0.0, 1.0, 1.0] # Initial cost for each alternative
+    #dict['customer_cost'] = [0.1, 0.1, 0.1] # Additional cost for each new customer
 
     # Choice set of the customers
     #	 		           n1 n2 n3...
@@ -591,7 +594,6 @@ def preprocess(dict):
     '''
 
     ########## Precomputation ##########
-
     # Priority list
     priority_list = np.empty([dict['I'] + 1, dict['N']])
     for i in range(dict['I'] + 1):
@@ -679,6 +681,72 @@ def preprocess(dict):
     dict['lb_Umin'] = lb_Umin
     dict['ub_Umax'] = ub_Umax
     dict['M_U'] = M
+
+    # Precompute the choice of the customer
+
+    # Tables to keep track of the customer choice. The entry correspond to the alternative id
+    choices = np.full((dict['N'], dict['R'], dict['n_price_levels'], dict['n_price_levels']), None)
+    # Table to keep track of the utility value for each customer, behavioral scenario, alternative and price level
+    U = np.full((dict['N'], dict['R'], dict['I'] + 1, dict['n_price_levels']), None)
+
+    # Fill out the tables
+    for n in range(dict['N']):
+        for r in range(dict['R']):
+            # Utility for opt-out
+            U[n, r, 0, :] = np.full((dict['n_price_levels']), dict['exo_utility'][0, n] + dict['xi'][0, n, r])
+            # Define the strat indices to explore while filling out the tables
+            strat_alt_1 = list(range(dict['n_price_levels']))
+            strat_alt_2 = list(reversed(range(dict['n_price_levels'])))
+            # Start exploring the tables
+            for l1 in strat_alt_1:
+                # Utility for alternative 1
+                if U[n, r, 1, l1] is None:
+                    U[n, r, 1, l1] = (dict['endo_coef'][1, n] * dict['p'][1, l1] +
+                                    dict['exo_utility'][1, n] + dict['xi'][1, n, r])
+                # Start by the entry where p1 is the lowest and p2 the highest
+                for l2 in strat_alt_2:
+                    # Utility for alternative 2
+                    if U[n, r, 2, l2] is None:
+                        U[n, r, 2, l2] = (dict['endo_coef'][2, n] * dict['p'][2, l2] +
+                                        dict['exo_utility'][2, n] + dict['xi'][2, n, r])
+                    # Compute the value in choices table
+                    choices[n, r, l1, l2] = np.argmax([U[n, r, 0, l1], U[n, r, 1, l1], U[n, r, 2, l2]])
+                    # Fill out the lower left part of the table if possible
+                    if choices[n, r, l1, l2] == 2:
+                        fill = np.full((dict['n_price_levels']-l1, l2 + 1), 2)
+                        choices[n, r, l1:, :(l2 + 1)] = fill
+                        strat_alt_2 = strat_alt_2[:dict['n_price_levels'] - (l2 + 1)]
+                        break
+
+    # Rewrite the choices table in a more convenient way
+    # The table w contains binary value.
+    # 1 means that the customer chooses the corresponding alternative, 0 otherwise
+    # If the entry is none, then the choice of the customer is not deterministic given the strategy
+    # for the corresponding alternative
+    w = np.full((dict['K'] + 1, dict['I'] + 1, dict['N'], dict['R'], dict['n_price_levels']), None)
+    for n in range(dict['N']):
+        for r in range(dict['R']):
+            for l1 in range(dict['n_price_levels']):
+                # Operator 1
+                elem = choices[n, r, l1, 0]
+                # Check if the row contains only one element
+                if (choices[n, r, l1, :] == elem).sum() == len(choices[n, r, l1, :]):
+                    for i in range(dict['I'] + 1):
+                        if i == elem:
+                            w[1 ,i, n, r, l1] = 1.0
+                        else:
+                            w[1, i, n, r, l1] = 0.0
+                # Operator 2
+                elem = choices[n, r, 0, l2]
+                # Check if the column contains only one element
+                if (choices[n, r, :, l2] == elem).sum() == len(choices[n, r, :, l2]):
+                    for i in range(dict['I'] + 1):
+                        if i == elem:
+                            w[2 ,i, n, r, l2] = 1.0
+                        else:
+                            w[2, i, n, r, l2] = 0.0
+
+    #dict['wAft_precomputed'] = w
 
 if __name__ == '__main__':
     dict = getData()

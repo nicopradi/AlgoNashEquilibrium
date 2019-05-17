@@ -19,10 +19,14 @@ def getData():
     dict['R'] = 100
 
     # Lower and upper bound on prices
-    dict['lb_p'] = np.array([0, 0.00, 0.00]) # lower bound (FSP, PSP, PUP)
-    dict['ub_p'] = np.array([0, 1.00, 1.00]) # upper bound (FSP, PSP, PUP)
+    dict['lb_p'] = np.array([0.0, 0.00, 0.00]) # lower bound (FSP, PSP, PUP)
+    dict['ub_p'] = np.array([0.0, 1.00, 1.00]) # upper bound (FSP, PSP, PUP)
 
-    dict['capacity'] = np.array([60.0, 6.0, 6.0]) # Availability for each alternative (opt-out always available)
+    #dict['capacity'] = np.array([60.0, 6.0, 6.0]) # Availability for each alternative (opt-out always available)
+
+    #dict['fixed_cost'] = [0.0, 0.2, 0.2] # Initial cost for each alternative
+    #dict['customer_cost'] = [0.0, 0.1, 0.3] # Additional cost for each new customer
+
     # Choice set of the customers
     #	 		           n1 n2 n3...
     dict['choice_set'] = np.array([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1],  # OPT-OUT
@@ -1171,6 +1175,71 @@ def preprocess(dict):
     dict['ub_Umax'] = ub_Umax
     dict['M'] = M
 
+def preprocess2(dict, prices):
+    ''' Compute a table for each customer and each draw. Each dimension of the table
+        corresponds to a discretized set of strategy for an alternative. The entry is
+        the alternative index that the customer will choose given the corresponding alternative
+        characteristics.
+        Args:
+            dict          data of the current instance
+            prices        discretized strategy set for each alternative
+    '''
+
+    # Get the number of price levels
+    n_price_levels = len(prices[0])
+    # Initialize the matrices
+    # TODO: Make it work for more than 2 alternatives
+    choices = np.empty([dict['N'], dict['R'], n_price_levels, n_price_levels])
+    # Compute the utility for each price combination
+    U = np.empty([dict['N'], dict['R'], dict['I'] + 1, n_price_levels])
+    for n in range(dict['N']):
+        for r in range(dict['R']):
+            for i in range(dict['I'] + 1):
+                for l in range(n_price_levels):
+                        U[n, r, i, l] = (dict['endo_coef'][i, n] * prices[i, l] +
+                                        dict['exo_utility'][i, n] + dict['xi'][i, n, r])
+    # Fill out the tables
+    for n in range(dict['N']):
+        for r in range(dict['R']):
+            for l1 in range(n_price_levels):
+                for l2 in range(n_price_levels):
+                    choices[n, r, l1, l2] = np.argmax([U[n, r, 0, l1], U[n, r, 1, l1], U[n, r, 2, l2]])
+
+    # Compute the 'predicted' choice of the customer when possible
+    # Assume there is 2 operators
+    w = np.full((2 + 1, dict['I'] + 1, dict['N'], dict['R'], n_price_levels), None)
+    for n in range(dict['N']):
+        for r in range(dict['R']):
+            for l1 in range(n_price_levels):
+                # Operator 1
+                elem = choices[n, r, l1, 0]
+                # Check if the row contains only one element
+                if (choices[n, r, l1, :] == elem).sum() == len(choices[n, r, l1, :]):
+                    print ('Ope 1: n = %r, r = %r, l1= %r, elem = %r' %(n, r, l1, elem))
+                    for i in range(dict['I'] + 1):
+                        if i == elem:
+                            w[1 ,i, n, r, l1] = 1.0
+                        else:
+                            w[1, i, n, r, l1] = 0.0
+                # Operator 2
+                elem = choices[n, r, 0, l2]
+                if (choices[n, r, :, l2] == elem).sum() == len(choices[n, r, :, l2]):
+                    print ('Ope 2: n = %r, r = %r, l2= %r, elem = %r' %(n, r, l2, elem))
+                    for i in range(dict['I'] + 1):
+                        if i == elem:
+                            w[2 ,i, n, r, l2] = 1.0
+                        else:
+                            w[2, i, n, r, l2] = 0.0
+
+
+    dict['wAft_precomputed'] = w
+    import IPython
+    IPython.embed()
+
 if __name__ == '__main__':
     dict = getData()
     preprocess(dict)
+    prices = np.empty([3, 20])
+    for i in range(len(prices)):
+        prices[i] = np.arange(0.6, 0.7, 0.005)
+    preprocess2(dict, prices)

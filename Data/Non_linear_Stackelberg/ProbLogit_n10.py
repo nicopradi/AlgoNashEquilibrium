@@ -20,6 +20,10 @@ def getData():
     dict['ub_p'] = np.array([0, 1.0, 1.0]) # upper bound (FSP, PSP, PUP)
 
     #dict['capacity'] = np.array([60.0, 6.0, 6.0]) # Availability for each alternative (opt-out always available)
+
+    #dict['fixed_cost'] = [0.0, 1.0, 1.0] # Initial cost for each alternative
+    #dict['customer_cost'] = [0.1, 0.15, 0.3] # Additional cost for each new customer
+
     # Choice set of the customers
     #	 		           n1 n2 n3...
     dict['choice_set'] = np.array([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1],  # OPT-OUT
@@ -83,7 +87,7 @@ def preprocess(dict):
         for i in range(dict['I'] + 1):
             if i == 0:
                 # Opt-Out
-                exo_utility[i, n] = (dict['Beta_AT'] * dict['AT_FSP'] +
+                exo_utility[i, n] =  (dict['Beta_AT'] * dict['AT_FSP'] +
                                        dict['Beta_TD'] * dict['TD_FSP'] +
                                        dict['Beta_Origin'] * dict['Origin'][n])
             elif i == 1:
@@ -129,7 +133,6 @@ def preprocess(dict):
 
     dict['lb_U'] = lb_U
     dict['ub_U'] = ub_U
-
 
 if __name__ == '__main__':
     dict = getData()
