@@ -251,22 +251,22 @@ class Fixed_Point:
                                         names = ['demandAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']'])
 
         ##### Add the constraints #####
-
         ##### Linearization
         for i in range(self.I + 1):
-            if self.operator[i] == k:
-                indices = ['price[' + str(i) + ']']
-                coefs = [1.0]
-                for l in range(self.n_price_levels):
-                    indices.append('vAft[' + str(k) + ']' + '[' + str(l) + ']')
-                    coefs.append(-self.p[i, l])
-                indices.append('a[' + str(i) + ']')
-                indices.append('b[' + str(i) + ']')
-                coefs.append(-1.0)
-                coefs.append(1.0)
-                model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                             senses = 'E',
-                                             rhs = [0.0])
+            for k in range(1, self.K + 1):
+                if self.operator[i] == k:
+                    indices = ['price[' + str(i) + ']']
+                    coefs = [1.0]
+                    for l in range(self.n_price_levels):
+                        indices.append('vAft[' + str(k) + ']' + '[' + str(l) + ']')
+                        coefs.append(-self.p[i, l])
+                    indices.append('a[' + str(i) + ']')
+                    indices.append('b[' + str(i) + ']')
+                    coefs.append(-1.0)
+                    coefs.append(1.0)
+                    model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                 senses = 'E',
+                                                 rhs = [0.0])
         for k in range(1, self.K + 1):
             for i in range(self.I + 1):
                 indices = ['a[' + str(i) + ']']
@@ -877,12 +877,22 @@ class Fixed_Point:
             print('Exception raised during dual of restricted problem')
 
 if __name__ == '__main__':
+    t_0 = time.time()
     # Get the data and preprocess
     dict = data_file.getData()
     data_file.preprocess(dict)
+    t_1 = time.time()
     #data_file.preprocess2(dict)
     # Instanciate a Stackelberg game and solve it
     game = Fixed_Point(**dict)
     model = game.getModel()
     print('MODEL COMPUTED')
+    t_2 = time.time()
     game.solveModel(model)
+    t_3 = time.time()
+    print('\n -- TIMING -- ')
+    print('Get data + Preprocess: %r sec' %(t_1 - t_0))
+    print('Get the model: %r sec' %(t_2 - t_1))
+    print('Solve the model: %r sec' %(t_3 - t_2))
+    print('--------------')
+    print('Total running time: %r sec' %(t_3 - t_0))

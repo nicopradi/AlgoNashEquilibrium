@@ -366,7 +366,6 @@ class Fixed_Point:
                         # If the preprocessing worked :
                         # Replace the 4 'Final configuration' constraints by the following one
                         if (self.wAft_precomputed is not None) and (self.wAft_precomputed[k, 0, n ,r, l] is not None):
-                            print('Precomputed : wAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']')
                             for i in range(self.I + 1):
                                 indices = ['wAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']']
                                 coefs = [1.0]

@@ -35,7 +35,7 @@ class Fixed_Point:
                 M_U             Big M value for each customer for the utility
                 exo_utility     Value of the utility for the exogene variables
                 endo_coef       Beta coefficient of the endogene variables
-                wAft_precomputed wAft value when is was possible to guess its value
+                wAft_precomputed wAft value when is was possible to precompute it
                 fixed_cost      Initial cost of an alternative
                 customer_cost   Additional cost of an alternative for each addition customer
 
@@ -203,15 +203,6 @@ class Fixed_Point:
                                         lb = [-cplex.infinity], ub = [cplex.infinity],
                                         names = ['demandAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']'])
 
-        # Linearized demand after
-        for k in range(1, self.K + 1):
-            for i in range(1, self.I + 1):
-                if self.operator[i] == k:
-                    model.variables.add(
-                                        types = [model.variables.type.continuous],
-                                        lb = [-cplex.infinity], ub = [cplex.infinity],
-                                        names = ['linDemandAft[' + str(k) + ']' + '[' + str(i) + ']'])
-
         # Linearized revenue after
         for k in range(1, self.K + 1):
             model.variables.add(types = [model.variables.type.continuous],
@@ -376,7 +367,6 @@ class Fixed_Point:
                         # If the preprocessing worked :
                         # Replace the 4 'Final configuration' constraints by the following one
                         if (self.wAft_precomputed is not None) and (self.wAft_precomputed[k, 0, n ,r, l] is not None):
-                            print('Precomputed : wAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']')
                             for i in range(self.I + 1):
                                 indices = ['wAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']']
                                 coefs = [1.0]
@@ -500,33 +490,7 @@ class Fixed_Point:
                     model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                                  senses = 'E',
                                                  rhs = [0.0])
-        '''
-        ## Auxiliary variable: Compute the linearized revenue after
-        # linDemandAft is an upperbound on demandAft
-        for k in range(1, self.K + 1):
-            for i in range(1, self.I + 1):
-                if self.operator[i] == k:
-                    for l in range(self.n_price_levels):
-                        indices = ['linDemandAft[' + str(k) + ']' + '[' + str(i) + ']',
-                                   'demandAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']']
-                        coefs = [1.0, -1.0]
-                        model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                                     senses = 'G',
-                                                     rhs = [0.0])
-        # demandAfter is an upperbound on linDemandAft
-        # if the corresponding strategy is played
-        for k in range(1, self.K + 1):
-            for i in range(1, self.I + 1):
-                if self.operator[i] == k:
-                    for l in range(self.n_price_levels):
-                        indices = ['vAft[' + str(k) + ']' + '[' + str(l) + ']',
-                                   'demandAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']',
-                                   'linDemandAft[' + str(k) + ']' + '[' + str(i) + ']']
-                        coefs = [-self.N-1.0, 1.0, -1.0]
-                        model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                                     senses = 'G',
-                                                     rhs = [-self.N-1.0])
-        '''
+
         # Auxiliary variable: Linearized revenue after
         # linRevenueAft is an upperbound on revenueAft
         for k in range(1, self.K + 1):
@@ -590,12 +554,6 @@ class Fixed_Point:
             for k in range(1, self.K + 1):
                 print('The linearized revenue of operator %r is: %r' %(k, model.solution.get_values('linRevenueAft[' + str(k) + ']')))
             print()
-            # Print the linearized demand
-            for k in range(1, self.K + 1):
-                for i in range(self.I + 1):
-                    if self.operator[i] == k:
-                        print('The linearized demand of alternative %r is: %r' %(k, model.solution.get_values('linDemandAft[' + str(k) + ']' + '[' + str(i) + ']')))
-
             # Print the distance auxiliary variables
             for i in range(self.I + 1):
                 if i > 0:
