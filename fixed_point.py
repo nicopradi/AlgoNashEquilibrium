@@ -252,33 +252,31 @@ class Fixed_Point:
 
         ##### Add the constraints #####
         ##### Linearization
+        for i in range(1, self.I + 1):
+            k = self.operator[i]
+            indices = ['price[' + str(i) + ']']
+            coefs = [1.0]
+            for l in range(self.n_price_levels):
+                indices.append('vAft[' + str(k) + ']' + '[' + str(l) + ']')
+                coefs.append(-self.p[i, l])
+            indices.append('a[' + str(i) + ']')
+            indices.append('b[' + str(i) + ']')
+            coefs.append(-1.0)
+            coefs.append(1.0)
+            model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                         senses = 'E',
+                                         rhs = [0.0])
         for i in range(self.I + 1):
-            for k in range(1, self.K + 1):
-                if self.operator[i] == k:
-                    indices = ['price[' + str(i) + ']']
-                    coefs = [1.0]
-                    for l in range(self.n_price_levels):
-                        indices.append('vAft[' + str(k) + ']' + '[' + str(l) + ']')
-                        coefs.append(-self.p[i, l])
-                    indices.append('a[' + str(i) + ']')
-                    indices.append('b[' + str(i) + ']')
-                    coefs.append(-1.0)
-                    coefs.append(1.0)
-                    model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                                 senses = 'E',
-                                                 rhs = [0.0])
-        for k in range(1, self.K + 1):
-            for i in range(self.I + 1):
-                indices = ['a[' + str(i) + ']']
-                coefs = [1.0]
-                model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                             senses = 'G',
-                                             rhs = [0.0])
-                indices = ['b[' + str(i) + ']']
-                coefs = [1.0]
-                model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                             senses = 'G',
-                                             rhs = [0.0])
+            indices = ['a[' + str(i) + ']']
+            coefs = [1.0]
+            model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                         senses = 'G',
+                                         rhs = [0.0])
+            indices = ['b[' + str(i) + ']']
+            coefs = [1.0]
+            model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                         senses = 'G',
+                                         rhs = [0.0])
 
         ##### Price choice - Customer choices
         # BEFORE
@@ -833,8 +831,12 @@ class Fixed_Point:
             print(model.solution.get_objective_value())
             for i in range(self.I +1):
                 print('Previous price of alt %r : %r' %(i, model.solution.get_values('price[' + str(i) + ']')))
-                print('After price of alt %r : %r' %(i, self.p[i]))
-
+            print()
+            for k in range(1, self.K + 1):
+                for l in range(self.n_price_levels):
+                    if model.solution.get_values('vAft[' + str(k) + ']' + '[' + str(l) + ']') == 1.0:
+                        print('Operator %r has chosen the strategy %r with price = %r' %(k, l, self.p[np.where(self.operator == k), l][0][0]))
+            print()
             for k in range(1, self.K + 1):
                 for i in range(self.I + 1):
                     for n in range(self.N):
@@ -880,7 +882,12 @@ if __name__ == '__main__':
     t_0 = time.time()
     # Get the data and preprocess
     dict = data_file.getData()
+    # Change the price bounds
+    dict['lb_p'] = np.array([0.00, 0.43, 0.52])
+    dict['ub_p'] = np.array([0.00, 0.64, 0.72])
     data_file.preprocess(dict)
+    import IPython
+    IPython.embed()
     t_1 = time.time()
     #data_file.preprocess2(dict)
     # Instanciate a Stackelberg game and solve it

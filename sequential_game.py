@@ -13,7 +13,7 @@ from cplex.exceptions import CplexSolverError
 # numpy
 import numpy as np
 # data
-import Data.Stackelberg.MILPLogit_n50r050 as data_file
+import Data.Stackelberg.MILPLogit_n10r100 as data_file
 import Data.Non_linear_Stackelberg.ProbMixedLogit_n10r50 as data_file_2
 # Stackelberg
 import stackelberg_game
@@ -37,7 +37,7 @@ class Sequential:
         self.max_iter = kwargs.get('max_iter', 10)
         self.p_fixed = kwargs.get('p_fixed', np.full((1, len(self.operator)), 1.0))
         self.y_fixed = kwargs.get('y_fixed', np.full((1, len(self.operator)), 1.0))
-        self.tolerance = kwargs.get('optimizer', 1e-3)
+        self.tolerance = kwargs.get('tolerance', 1e-3)
         # Keep track of the price, benefit, market share and demand at each iteration
         self.p_history = np.full((self.max_iter, len(self.operator)), -1.0)
         self.benefit = np.full((self.max_iter, self.K + 1), -1.0)
@@ -123,7 +123,7 @@ class Sequential:
             # Set the current solution to be the starting point in the next interation
             # except if it is unfeasible
             if linearized is False:
-                print('Status: %r' %status_msg)
+                print('\nIPOTP Status: %r\n' %status_msg)
                 if status != 2:
                     data['x0'] = copy.deepcopy(x0)
 
@@ -174,6 +174,7 @@ class Sequential:
         if self.cycle_iter is not None:
             plt.axvline(x=self.cycle_iter, linestyle=':', color='black')
         plt.ylabel('Benefit')
+        plt.xlabel('Iteration number')
         plt.title("Operator's benefit as a function of the iteration number. \
         \n The initial prices are: Operator 1: %r and Operator 2: %r" %(self.p_fixed[1], self.p_fixed[2]))
         plt.legend()
@@ -193,6 +194,7 @@ class Sequential:
         if self.cycle_iter is not None:
             plt.axvline(x=self.cycle_iter, linestyle=':', color='black')
         plt.ylabel('Market share')
+        plt.xlabel('Iteration number')
         plt.title("Operator's market share as a function of the iteration number. \
         \n The initial prices are: Operator 1: %r and Operator 2: %r" %(self.p_fixed[1], self.p_fixed[2]))
         plt.legend()
