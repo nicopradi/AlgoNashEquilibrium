@@ -831,11 +831,13 @@ class Fixed_Point:
             print(model.solution.get_objective_value())
             for i in range(self.I +1):
                 print('Previous price of alt %r : %r' %(i, model.solution.get_values('price[' + str(i) + ']')))
+                print('Previous demand alt %r : %r' %(i, model.solution.get_values('demand[' + str(i) + ']')))
             print()
             for k in range(1, self.K + 1):
                 for l in range(self.n_price_levels):
                     if model.solution.get_values('vAft[' + str(k) + ']' + '[' + str(l) + ']') == 1.0:
                         print('Operator %r has chosen the strategy %r with price = %r' %(k, l, self.p[np.where(self.operator == k), l][0][0]))
+                        print('The after revenue of operator %r = %r' %(k, model.solution.get_values('revenueAft[' + str(k) + ']' + '[' + str(l) + ']')))
             print()
             for k in range(1, self.K + 1):
                 for i in range(self.I + 1):
@@ -886,8 +888,6 @@ if __name__ == '__main__':
     dict['lb_p'] = np.array([0.00, 0.43, 0.52])
     dict['ub_p'] = np.array([0.00, 0.64, 0.72])
     data_file.preprocess(dict)
-    import IPython
-    IPython.embed()
     t_1 = time.time()
     #data_file.preprocess2(dict)
     # Instanciate a Stackelberg game and solve it
