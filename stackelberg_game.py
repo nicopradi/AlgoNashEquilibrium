@@ -162,7 +162,7 @@ class Stackelberg:
                                                  rhs = [self.y_fixed[i]])
         ##### Choice Availability
 
-        # Each customer choose one alternative
+        # Each customer chooses exactly one alternative:
         for n in range(self.N):
             for r in range(self.R):
                 indices = []
@@ -205,8 +205,8 @@ class Stackelberg:
                                              senses = 'E',
                                              rhs = [1.0])
 
-        # Alternative not available at scnerio level if not included in the choice_set
-        if self.choice_set is not None:
+        # Alternative not available at scenario level if not included in the ChoiceSet
+        if self.ChoiceSet is not None:
             for i in range(self.I + 1):
                 for n in range(self.N):
                     for r in range(self.R):
@@ -337,7 +337,7 @@ class Stackelberg:
                                                  rhs = [self.exo_utility[i, n] + self.xi[i, n, r]])
 
         #### Discounted utility function
-        if self.capacity is not None:
+        if self.Capacity is not None:           # QUESTION: Why do you need the capacity here ?
             for i in range(self.I + 1):
                 for n in range(self.N):
                     for r in range(self.R):
@@ -401,7 +401,7 @@ class Stackelberg:
                                                  senses = 'L',
                                                  rhs = [self.M[n, r]])
 
-        #### Auxiliary constraints to compute the demands
+        #### Auxiliary constraints to compute the average demands
         for i in range(self.I + 1):
             indices = []
             coefs = []

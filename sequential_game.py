@@ -27,7 +27,7 @@ class Sequential:
                 max_iter    Maximum number of iterations
                 optimizer  Current operator index
                 p_fixed    Current prices of the other operator's alternatives
-                p_fixed    Current availabilty of the other operator's alternatives
+                y_fixed    Current availabilty of the other operator's alternatives
         '''
         self.K = kwargs.get('K', 1)
         self.operator = kwargs.get('operator', np.full((1, self.K + 1), 1))
@@ -84,6 +84,7 @@ class Sequential:
                 self.market_share[iter, i] = float(demand[i])/data['N']
 
             # Check for the cycle
+            # First check if all operators have played.
             if iter >= self.K:
                 iteration_to_check = range(iter-self.K, -1, -self.K)
                 print('ITERATION TO CHECK: %r' %list(iteration_to_check))
