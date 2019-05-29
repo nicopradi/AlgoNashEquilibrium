@@ -9,14 +9,15 @@ from cplex.exceptions import CplexSolverError
 # numpy
 import numpy as np
 #data
-import Data.Fixed_Point.ProbLogit_n10 as data_file
+import Data.Parking_lot.Fixed_Point.ProbLogit_n10 as data_file
 
 class Fixed_Point:
 
     def __init__(self, **kwargs):
         ''' Construct a Fixed_point game
             KeywordArgs:
-                I               Number of alternatives
+                I               Number of alternatives (without opt-out) [int]
+                I_opt_out       Number of opt-out alternatives [int]
                 N               Number of customers
                 R               Number of draws
                 K               Number of operators
@@ -42,6 +43,7 @@ class Fixed_Point:
         '''
         ## TODO: Check correctness of the attributes value
         self.I = kwargs.get('I', 2)
+        self.I_opt_out = kwargs.get('I_opt_out', 1)
         self.N = kwargs.get('N', 10)
         self.R = kwargs.get('R', 50)
         self.K = kwargs.get('K', 2)
@@ -64,6 +66,10 @@ class Fixed_Point:
         # Optional
         self.fixed_cost = kwargs.get('fixed_cost', None)
         self.customer_cost = kwargs.get('customer_cost', None)
+        # Attributes
+        self.reverse_operator = {}
+        for k in range(self.K + 1):
+            self.reverse_operator[k] = [i for i, ope in enumerate(self.operator) if ope == k]
 
     def getModel(self):
         ''' Construct a CPLEX model corresponding to a Stackelberg game (1 leader,
@@ -80,35 +86,39 @@ class Fixed_Point:
 
         ## BEFORE
         # Initial strategy picked by each operator
+        # Strategy picked by each operator
         for k in range(1, self.K + 1):
-            for l in range(self.n_price_levels):
-                model.variables.add(types = [model.variables.type.binary],
-                                    names = ['v[' + str(k) + ']' + '[' + str(l) + ']'])
+            for i in range(self.I + self.I_opt_out):
+                for l in range(self.n_price_levels):
+                    model.variables.add(types = [model.variables.type.binary],
+                                        names = ['v[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']'])
 
         ## AFTER
         # Revenue maximal for each operator
         for k in range(1, self.K + 1):
             model.variables.add(types = [model.variables.type.continuous],
                                 lb = [-cplex.infinity], ub = [cplex.infinity],
-                                names = ['revenueMaxAft[' + str(k) + ']'])
+                                names = ['revenueAftMax[' + str(k) + ']'])
 
         # Revenue for each operator for each strategy
         for k in range(1, self.K + 1):
-            for l in range(self.n_price_levels):
-                model.variables.add(types = [model.variables.type.continuous],
-                                    lb = [-cplex.infinity], ub = [cplex.infinity],
-                                    names = ['revenueAft[' + str(k) + ']' + '[' + str(l) + ']'])
+            for i in range(self.I + self.I_opt_out):
+                for l in range(self.n_price_levels):
+                    model.variables.add(types = [model.variables.type.continuous],
+                                        lb = [-cplex.infinity], ub = [cplex.infinity],
+                                        names = ['revenueAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']'])
 
-        # Best response strategy picked by each operator
+        # Strategy picked by each operator
         for k in range(1, self.K + 1):
-            for l in range(self.n_price_levels):
-                model.variables.add(types = [model.variables.type.binary],
-                                    names = ['vAft[' + str(k) + ']' + '[' + str(l) + ']'])
+            for i in range(self.I + self.I_opt_out):
+                for l in range(self.n_price_levels):
+                    model.variables.add(types = [model.variables.type.binary],
+                                        names = ['vAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']'])
 
         ## LEVEL 2 : CUSTOMER LEVEL
         ## BEFORE
         # Customer Utility
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             for n in range(self.N):
                 for r in range(self.R):
                     model.variables.add(types = [model.variables.type.continuous],
@@ -123,14 +133,14 @@ class Fixed_Point:
                                     names = ['Umax[' + str(n) + ']' + '[' + str(r) + ']'])
 
         # Choice among alternatives
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             for n in range(self.N):
                 for r in range(self.R):
                     model.variables.add(types = [model.variables.type.binary],
                                         names = ['w[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']'])
 
         # Linearized price
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             for n in range(self.N):
                 for r in range(self.R):
                     model.variables.add(types = [model.variables.type.continuous],
@@ -140,7 +150,7 @@ class Fixed_Point:
         ## AFTER
         # Choice among alternative for each strategy
         for k in range(1, self.K + 1):
-            for i in range(self.I + 1):
+            for i in range(self.I + self.I_opt_out):
                 for n in range(self.N):
                     for r in range(self.R):
                         for l in range(self.n_price_levels):
@@ -149,7 +159,7 @@ class Fixed_Point:
 
         # Utility
         for k in range(1, self.K + 1):
-            for i in range(self.I + 1):
+            for i in range(self.I + self.I_opt_out):
                 for n in range(self.N):
                     for r in range(self.R):
                         for l in range(self.n_price_levels):
@@ -168,8 +178,8 @@ class Fixed_Point:
 
         ## AUXILIARY VARIABLES
         # Distance between the previous price and next price
-        for i in range(self.I + 1):
-            if i > 0:
+        for i in range(self.I + self.I_opt_out):
+            if i >= self.I_opt_out:
                 model.variables.add(obj = [1.0],
                                     types = [model.variables.type.continuous],
                                     lb = [-cplex.infinity], ub = [cplex.infinity],
@@ -188,34 +198,29 @@ class Fixed_Point:
 
 
         # Demand
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             model.variables.add(types = [model.variables.type.continuous],
                                 lb = [-cplex.infinity], ub = [cplex.infinity],
                                 names = ['demand[' + str(i) + ']'])
 
         # Demand after
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             for l in range(self.n_price_levels):
                 model.variables.add(types = [model.variables.type.continuous],
                                     lb = [-cplex.infinity], ub = [cplex.infinity],
                                     names = ['demandAft[' + str(i) + ']' + '[' + str(l) + ']'])
 
-        # Linearized revenue after
-        for k in range(1, self.K + 1):
-            model.variables.add(types = [model.variables.type.continuous],
-                                lb = [-cplex.infinity], ub = [cplex.infinity],
-                                names = ['linRevenueAft[' + str(k) + ']'])
 
         ##### Add the constraints #####
         ##### Linearization
-        for i in range(1, self.I + 1):
+        for i in range(self.I_opt_out, self.I + self.I_opt_out):
             k = self.operator[i]
             indices = []
             coefs = []
             for l in range(self.n_price_levels):
-                indices.append('vAft[' + str(k) + ']' + '[' + str(l) + ']')
+                indices.append('vAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']')
                 coefs.append(-self.p[i, l])
-                indices.append('v[' + str(k) + ']' + '[' + str(l) + ']')
+                indices.append('v[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']')
                 coefs.append(self.p[i, l])
             indices.append('a[' + str(i) + ']')
             indices.append('b[' + str(i) + ']')
@@ -224,7 +229,7 @@ class Fixed_Point:
             model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                          senses = 'E',
                                          rhs = [0.0])
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             indices = ['a[' + str(i) + ']']
             coefs = [1.0]
             model.linear_constraints.add(lin_expr = [[indices, coefs]],
@@ -238,7 +243,7 @@ class Fixed_Point:
 
         ##### Price choice - Customer choices
         # BEFORE
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             k = self.operator[i]
             for n in range(self.N):
                 for r in range(self.R):
@@ -257,7 +262,7 @@ class Fixed_Point:
                     model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                                  senses = 'L',
                                                  rhs = [0.0])
-                    if i > 0:
+                    if i >= self.I_opt_out:
                         # Alpha is equal to the price if alternative is chosen
                         # The linearized price is already equal to 0 for the opt-out
                         indices = ['alpha[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
@@ -265,7 +270,7 @@ class Fixed_Point:
                         coefs = [-1.0,
                                  self.ub_p[i]]
                         for l in range(self.n_price_levels):
-                            indices.append('v[' + str(k) + ']' + '[' + str(l) + ']')
+                            indices.append('v[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']')
                             coefs.append(self.p[i, l])
                         model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                                      senses = 'L',
@@ -273,7 +278,7 @@ class Fixed_Point:
                         indices = ['alpha[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
                         coefs = [1.0]
                         for l in range(self.n_price_levels):
-                            indices.append('v[' + str(k) + ']' + '[' + str(l) + ']')
+                            indices.append('v[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']')
                             coefs.append(-self.p[i, l])
                         model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                                      senses = 'L',
@@ -290,7 +295,7 @@ class Fixed_Point:
                 indices = ['revenueAft[' + str(k) + ']' + '[' + str(l) + ']']
                 coefs = [1.0]
                 rhs = 0.0
-                for i in range(self.I + 1):
+                for i in range(self.I + self.I_opt_out):
                     if self.operator[i] == k:
                         if self.fixed_cost is not None:
                             rhs += -self.fixed_cost[i]
@@ -298,51 +303,70 @@ class Fixed_Point:
                             for r in range(self.R):
                                 indices.append('wAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']')
                                 if self.customer_cost is not None:
-                                    coefs.append((-1.0*self.p[i, l]+self.fixed_cost[i])/self.R)
-                                coefs.append(-1.0*self.p[i, l]/self.R)
+                                    coefs.append((-1.0*self.p[i, l]+self.customer_cost[i])/self.R)
+                                else:
+                                    coefs.append(-1.0*self.p[i, l]/self.R)
                 model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                              senses = 'E',
                                              rhs = [rhs])
 
-        ## The operator pick exactly one strategy. The second strategy is the one which give the highest revenue
-        # BEFORE
+        ## The operator pick exactly one strategy.
         for k in range(1, self.K + 1):
-            indices = []
-            coefs = []
-            for l in range(self.n_price_levels):
-                indices.append('v[' + str(k) + ']' + '[' + str(l) + ']')
-                coefs.append(1.0)
-            model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                         senses = 'E',
-                                         rhs = [1.0])
-        # AFTER (best response)
+            for i in self.reverse_operator[k]:
+                # BEFORE
+                indices = []
+                coefs = []
+                for l in range(self.n_price_levels):
+                    indices.append('v[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']')
+                    coefs.append(1.0)
+                model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                             senses = 'E',
+                                             rhs = [1.0])
+                # AFTER
+                indices = []
+                coefs = []
+                for l in range(self.n_price_levels):
+                    indices.append('vAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']')
+                    coefs.append(1.0)
+                model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                             senses = 'E',
+                                             rhs = [1.0])
+
+        # The second strategy is the one which give the highest revenue
+        # AFTER
         for k in range(1, self.K + 1):
-            indices = []
-            coefs = []
-            for l in range(self.n_price_levels):
-                indices.append('vAft[' + str(k) + ']' + '[' + str(l) + ']')
-                coefs.append(1.0)
-            model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                         senses = 'E',
-                                         rhs = [1.0])
-        for k in range(1, self.K + 1):
-            for l in range(self.n_price_levels):
-                indices = ['revenueAft[' + str(k) + ']' + '[' + str(l) + ']',
-                           'revenueMaxAft[' + str(k) + ']']
-                coefs = [1.0,
-                         -1.0]
+            # Set of all the possible strategies for the operator k
+            strategy = [list(range(self.n_price_levels)) for i in range(len(self.reverse_operator[k]))]
+            strategies = itertools.product(*strategy)
+            # Mapping between alternative index in I and alternative index in strategies
+            map_index = {}
+            index = 0
+            for i in self.reverse_operator[k]:
+                map_index[i] = index
+                index += 1
+            # For each strategy of the operator k, add the revenue maximization constraints
+            for s in strategies:
+                # Lower bound on revenueAftMax
+                indices = ['revenueAftMax[' + str(k) + ']']
+                coefs = [-1.0]
+                for i in self.reverse_operator[k]:
+                    indices.append('revenueAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(s[map_index[i]]) + ']')
+                    coefs.append(1.0)
                 model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                              senses = 'L',
                                              rhs = [0.0])
-                indices = ['revenueMaxAft[' + str(k) + ']',
-                           'revenueAft[' + str(k) + ']' + '[' + str(l) + ']',
-                           'vAft[' + str(k) + ']' + '[' + str(l) + ']']
-                coefs = [1.0,
-                         -1.0,
-                         self.M_rev]
+                # Upper bound on revenueAftMax if s is chosen
+                indices = ['revenueAftMax[' + str(k) + ']']
+                coefs = [1.0]
+                for i in self.reverse_operator[k]:
+                    indices.append('revenueAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(s[map_index[i]]) + ']')
+                    coefs.append(-1.0)
+                    indices.append('vAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(s[map_index[i]]) + ']')
+                    coefs.append(self.M_rev/len(self.reverse_operator[k]))
+
                 model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                              senses = 'L',
-                                             rhs = [self.M_rev])
+                                             rhs = [len(self.reverse_operator[k])*self.M_rev])
 
         ### LEVEL 2 : CUSTOMER UTILITY MAXIMIZATION
         ## Choice-availability constraints
@@ -352,7 +376,7 @@ class Fixed_Point:
             for r in range(self.R):
                 indices = []
                 coefs = []
-                for i in range(self.I + 1):
+                for i in range(self.I + self.I_opt_out):
                     indices.append('w[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']')
                     coefs.append(1.0)
                 model.linear_constraints.add(lin_expr = [[indices, coefs]],
@@ -366,7 +390,7 @@ class Fixed_Point:
                         # If the preprocessing worked :
                         # Replace the 4 'Final configuration' constraints by the following one
                         if (self.wAft_precomputed is not None) and (self.wAft_precomputed[k, 0, n ,r, l] is not None):
-                            for i in range(self.I + 1):
+                            for i in range(self.I + self.I_opt_out):
                                 indices = ['wAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']']
                                 coefs = [1.0]
                                 model.linear_constraints.add(lin_expr = [[indices, coefs]],
@@ -375,7 +399,7 @@ class Fixed_Point:
                         else:
                             indices = []
                             coefs = []
-                            for i in range(self.I + 1):
+                            for i in range(self.I + self.I_opt_out):
                                 indices.append('wAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']')
                                 coefs.append(1.0)
                             model.linear_constraints.add(lin_expr = [[indices, coefs]],
@@ -384,11 +408,11 @@ class Fixed_Point:
 
         # Utility function
         # BEFORE
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             k = self.operator[i]
             for n in range(self.N):
                 for r in range(self.R):
-                    if i == 0:
+                    if i < self.I_opt_out:
                         # Opt-out utility
                         indices = ['U[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
                         coefs = [1.0]
@@ -399,14 +423,14 @@ class Fixed_Point:
                         indices = ['U[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
                         coefs = [1.0]
                         for l in range(self.n_price_levels):
-                            indices.append('v[' + str(k) + ']' + '[' + str(l) + ']')
+                            indices.append('v[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']')
                             coefs.append(-self.p[i, l]*self.endo_coef[i, n])
                         model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                                      senses = 'E',
                                                      rhs = [self.exo_utility[i, n] + self.xi[i, n, r]])
 
         # AFTER
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             for k in range(1, self.K + 1):
                 for n in range(self.N):
                     for r in range(self.R):
@@ -431,7 +455,7 @@ class Fixed_Point:
         # Utility-choice constraints
         # The selected alternative is the one with maximum discounted utility
         # BEFORE
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             for n in range(self.N):
                 for r in range(self.R):
                     indices = ['U[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
@@ -450,7 +474,7 @@ class Fixed_Point:
 
         # AFTER
         for k in range(1, self.K + 1):
-            for i in range(self.I + 1):
+            for i in range(self.I + self.I_opt_out):
                 for n in range(self.N):
                     for r in range(self.R):
                         for l in range(self.n_price_levels):
@@ -472,7 +496,7 @@ class Fixed_Point:
 
         # Auxiliary constraints to calculate the demands (not part of the model)
         # BEFORE
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             indices = []
             coefs = []
             for n in range(self.N):
@@ -486,7 +510,7 @@ class Fixed_Point:
                                          rhs = [0.0])
 
         # AFTER
-        for i in range(1, self.I + 1):
+        for i in range(1, self.I + self.I_opt_out):
             k = self.operator[i]
             for l in range(self.n_price_levels):
                 indices = []
@@ -500,29 +524,6 @@ class Fixed_Point:
                 model.linear_constraints.add(lin_expr = [[indices, coefs]],
                                              senses = 'E',
                                              rhs = [0.0])
-
-        # Auxiliary variable: Linearized revenue after
-        # linRevenueAft is an upperbound on revenueAft
-        for k in range(1, self.K + 1):
-            for l in range(self.n_price_levels):
-                indices = ['linRevenueAft[' + str(k) + ']',
-                           'revenueAft[' + str(k) + ']' + '[' + str(l) + ']']
-                coefs = [1.0, -1.0]
-                model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                             senses = 'G',
-                                             rhs = [0.0])
-
-        # RevenueAft is an upperbound on linRevenueAft
-        # if the corresponding strategy is played
-        for k in range(1, self.K + 1):
-            for l in range(self.n_price_levels):
-                indices = ['vAft[' + str(k) + ']' + '[' + str(l) + ']',
-                           'revenueAft[' + str(k) + ']' + '[' + str(l) + ']',
-                           'linRevenueAft[' + str(k) + ']']
-                coefs = [-self.M_rev, 1.0, -1.0]
-                model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                             senses = 'G',
-                                             rhs = [-self.M_rev])
 
         return model
 
@@ -542,34 +543,34 @@ class Fixed_Point:
             print('Objective function: %r '%(model.solution.get_objective_value()))
             # Print the previous price
             print()
-            for i in range(1, self.I + 1):
+            for i in range(1, self.I + self.I_opt_out):
                 k = self.operator[i]
                 for l in range(self.n_price_levels):
-                    if model.solution.get_values('v[' + str(k) + ']' + '[' + str(l) + ']') == 1.0:
+                    if model.solution.get_values('v[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']') == 1.0:
                         print('Previous price of alt %r : %r' %(i, self.p[i, l]))
             # Print the strategy chosen by the operator
             print()
             for k in range(1, self.K + 1):
-                for l in range(self.n_price_levels):
-                    if model.solution.get_values('vAft[' + str(k) + ']' + '[' + str(l) + ']') == 1.0:
-                        print('Operator %r has chosen the strategy %r with price = %r' %(k, l, self.p[np.where(self.operator == k), l][0][0]))
-                        print('The after revenue of operator %r = %r' %(k, model.solution.get_values('revenueAft[' + str(k) + ']' + '[' + str(l) + ']')))
+                for i in self.reverse_operator[k]:
+                    for l in range(self.n_price_levels):
+                        if model.solution.get_values('vAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']') == 1.0:
+                            print('Operator %r has chosen the strategy %r for alternative %r with price = %r' %(k, l, i, self.p[np.where(self.operator == k), l][0][0]))
+                            print('The after revenue of operator %r = %r' %(k, model.solution.get_values('revenueAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']')))
             # Print the demand
             print()
-            for i in range(self.I +1):
-                for k in range(1, self.K + 1):
-                    if self.operator[i] == k:
-                        for l in range(self.n_price_levels):
-                            if model.solution.get_values('vAft[' + str(k) + ']' + '[' + str(l) + ']') == 1.0:
-                                print('The after demand for the alternative %r = %r ' %(i, model.solution.get_values('demandAft[' + str(i) + ']' + '[' + str(l) + ']')))
+            for i in range(self.I_opt_out, self.I  + self.I_opt_out):
+                k = self.operator[i]
+                for l in range(self.n_price_levels):
+                    if model.solution.get_values('vAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']') == 1.0:
+                        print('The after demand for the alternative %r = %r ' %(i, model.solution.get_values('demandAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']')))
             print()
-            # Print the linearized revenue
+            # Print the after revenue
             for k in range(1, self.K + 1):
-                print('The linearized revenue of operator %r is: %r' %(k, model.solution.get_values('linRevenueAft[' + str(k) + ']')))
+                print('The after revenue of operator %r is: %r' %(k, model.solution.get_values('revenueAftMax[' + str(k) + ']')))
             print()
             # Print the distance auxiliary variables
             for i in range(self.I + 1):
-                if i > 0:
+                if i >= self.I_opt_out:
                     print('A Distance(i = %r): %r' %(i,
                             model.solution.get_values('a[' + str(i) + ']')))
                     print('B Distance(i = %r): %r' %(i,

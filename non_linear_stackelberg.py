@@ -11,13 +11,14 @@ import ipopt
 # numpy
 import numpy as np
 # data
-import Data.Non_linear_Stackelberg.ProbMixedLogit_n5r50 as data_file
+import Data.Parking_lot.Non_linear_Stackelberg.ProbMixedLogit_n5r50 as data_file
 
 class Stackelberg(object):
     def __init__(self, **kwargs):
         ''' Construct a non linear Stackelberg game.
             KeywordArgs:
-                I                 Number of alternatives [int]
+                I                 Number of alternatives (without opt-out) [int]
+                I_opt_out         Number of opt-out alternatives [int]
                 N                 Number of customers [int]
                 endo_coef         Beta coefficient of the endogene variables [list]
                 exo_utility       Value of the utility for the exogene variables [list]
@@ -34,6 +35,7 @@ class Stackelberg(object):
         '''
         # Keyword arguments
         self.I = kwargs.get('I')
+        self.I_opt_out = kwargs.get('I_opt_out', 1)
         self.N = kwargs.get('N')
         self.endo_coef = kwargs.get('endo_coef')
         self.exo_utility = kwargs.get('exo_utility')
@@ -54,7 +56,7 @@ class Stackelberg(object):
         current_index = 0
 
         # Price variables
-        self.p = np.empty(self.I + 1, dtype = int)
+        self.p = np.empty(self.I + self.I_opt_out, dtype = int)
         for i in range(len(self.p)):
             self.p[i] = current_index
             current_index += 1
@@ -62,14 +64,14 @@ class Stackelberg(object):
         # Utility variables
         if self.R_coef is None:
             # Logit
-            self.U = np.empty([self.I + 1, self.N], dtype = int)
+            self.U = np.empty([self.I + self.I_opt_out, self.N], dtype = int)
             for i in range(len(self.U)):
                 for j in range(len(self.U[0])):
                     self.U[i, j] = current_index
                     current_index += 1
         else:
             # Mixed logit
-            self.U = np.empty([self.I + 1, self.N, self.R_coef], dtype = int)
+            self.U = np.empty([self.I + self.I_opt_out, self.N, self.R_coef], dtype = int)
             for i in range(len(self.U)):
                 for j in range(len(self.U[i])):
                     for r in range(len(self.U[i, j])):
@@ -77,7 +79,7 @@ class Stackelberg(object):
                         current_index += 1
 
         # Choice variables
-        self.w = np.empty([self.I + 1, self.N], dtype = int)
+        self.w = np.empty([self.I + self.I_opt_out, self.N], dtype = int)
         for i in range(len(self.w)):
             for j in range(len(self.w[0])):
                 self.w[i, j] = current_index
@@ -86,7 +88,7 @@ class Stackelberg(object):
         # Capacity variables
         if self.capacity is not None:
             # Availability variables
-            self.y = np.empty([self.I + 1, self.N], dtype = int)
+            self.y = np.empty([self.I + self.I_opt_out, self.N], dtype = int)
             for i in range(len(self.y)):
                 for j in range(len(self.y[0])):
                     self.y[i, j] = current_index
@@ -98,7 +100,7 @@ class Stackelberg(object):
         '''
         expression = 0.0
         # Add revenue to the objective function
-        for i in range(self.I + 1):
+        for i in range(self.I_opt_out, self.I + self.I_opt_out):
             # Consider the alternatives managed by the optimizer only
             if (self.optimizer is None) or (self.operator[i] == self.optimizer):
                 for n in range(self.N):
@@ -107,7 +109,7 @@ class Stackelberg(object):
 
         # Add the initial cost and customer cost
         if self.fixed_cost is not None:
-            for i in range(1, self.I + 1):
+            for i in range(self.I_opt_out, self.I + self.I_opt_out):
                 if (self.optimizer is None) or (self.operator[i] == self.optimizer):
                     # Initial cost
                     expression += self.fixed_cost[i]
@@ -126,7 +128,7 @@ class Stackelberg(object):
         ### Price variables
         for i in range(len(self.p)):
             expression = 0.0
-            if (self.optimizer is None) or (self.operator[i] == self.optimizer):
+            if (i >= self.I_opt_out) and ((self.optimizer is None) or (self.operator[i] == self.optimizer)):
                 for n in range(len(self.w[i])):
                     expression += -x[self.w[i, n]]
             gradient.append(expression)
@@ -145,7 +147,7 @@ class Stackelberg(object):
         ### Choice variables
         for i in range(len(self.w)):
             for n in range(len(self.w[i])):
-                if (self.optimizer is None) or (self.operator[i] == self.optimizer):
+                if (i >= self.I_opt_out) and ((self.optimizer is None) or (self.operator[i] == self.optimizer)):
                     if self.customer_cost is not None:
                         gradient.append(-x[self.p[i]] + self.customer_cost[i])
                     else:
@@ -243,18 +245,19 @@ class Stackelberg(object):
                     expression = x[self.y[i, n]] * (1.0 - x[self.y[i, n]])
                     constraints.append(expression)
             # opt-out is always an available option
-            for n in range(self.N):
-                expression = x[self.y[0, n]]
-                constraints.append(expression)
+            for i in range(self.I_opt_out):
+                for n in range(self.N):
+                    expression = x[self.y[i, n]]
+                    constraints.append(expression)
             # Capacity is not exceeded
-            for i in range(self.I + 1):
+            for i in range(self.I + self.I_opt_out):
                 sum = 0
                 for n in range(self. N):
                     sum += x[self.w[i, n]]
                 expression = sum - self.capacity[i]
                 constraints.append(expression)
             # Priority list, if y is 0 then the max capacity is reached
-            for i in range(1, self.I + 1):
+            for i in range(self.I + self.I_opt_out):
                 for n in range(self.N):
                     expression = self.capacity[i]*(1.0 - x[self.y[i, n]])
                     # Compute the number of customers with a higher priority which chose alternative i
@@ -262,7 +265,7 @@ class Stackelberg(object):
                     expression += -sum
                     constraints.append(expression)
             # Priority list, if y is 1 then there is free room
-            for i in range(1, self.I + 1):
+            for i in range(self.I + self.I_opt_out):
                 for n in range(self.N):
                     # This type of constraint is revelant only if the capacity could be exceeded
                     if self.priority_list[i, n] > self.capacity[i]:
@@ -506,34 +509,35 @@ class Stackelberg(object):
                             else:
                                 jacobian.append(0.0)
             #### opt-out is always an available option
-            for n in range(self.N):
-                # For each variable
-                # Price variables
-                for j in range(len(self.p)):
-                    jacobian.append(0.0)
-                # Utility variables
-                if self.R_coef is None:
-                    for j in range(len(self.U)):
-                        for m in range(len(self.U[j])):
-                            jacobian.append(0.0)
-                else:
-                    for j in range(len(self.U)):
-                        for m in range(len(self.U[j])):
-                            for r in range(len(self.U[j, m])):
-                                jacobian.append(0.0)
-                # Choice variables
-                for j in range(len(self.w)):
-                    for m in range(len(self.w[j])):
+            for i in range(self.I_opt_out):
+                for n in range(self.N):
+                    # For each variable
+                    # Price variables
+                    for j in range(len(self.p)):
                         jacobian.append(0.0)
-                # Availability variables
-                for j in range(len(self.y)):
-                    for m in range(len(self.y[j])):
-                        if (j == 0) and (n == m):
-                            jacobian.append(1.0)
-                        else:
+                    # Utility variables
+                    if self.R_coef is None:
+                        for j in range(len(self.U)):
+                            for m in range(len(self.U[j])):
+                                jacobian.append(0.0)
+                    else:
+                        for j in range(len(self.U)):
+                            for m in range(len(self.U[j])):
+                                for r in range(len(self.U[j, m])):
+                                    jacobian.append(0.0)
+                    # Choice variables
+                    for j in range(len(self.w)):
+                        for m in range(len(self.w[j])):
                             jacobian.append(0.0)
+                    # Availability variables
+                    for j in range(len(self.y)):
+                        for m in range(len(self.y[j])):
+                            if (j == i) and (n == m):
+                                jacobian.append(1.0)
+                            else:
+                                jacobian.append(0.0)
             #### capacity is not exceeded
-            for i in range(self.I + 1):
+            for i in range(self.I + self.I_opt_out):
                 # For each variable
                 # Price variables
                 for j in range(len(self.p)):
@@ -560,7 +564,7 @@ class Stackelberg(object):
                     for m in range(len(self.y[j])):
                         jacobian.append(0.0)
             #### Priority list, if y[i, n] is 0 then the max capacity of alternative i is reached
-            for i in range(1, self.I + 1):
+            for i in range(self.I + self.I_opt_out):
                 for n in range(self.N):
                     # For each variable
                     # Price variables
@@ -591,7 +595,7 @@ class Stackelberg(object):
                             else:
                                 jacobian.append(0.0)
             #### Priority list, if y[i, n] is 1 then there is free room for n to choose alternative i
-            for i in range(1, self.I + 1):
+            for i in range(self.I + self.I_opt_out):
                 for n in range(self.N):
                     # This type of constraint is revelant only if the capacity can be exceeded
                     if self.priority_list[i, n] > self.capacity[i]:
@@ -637,29 +641,29 @@ def main(data, tol=1e-3):
     lb = []
     ub = []
     # Price variables
-    for i in range(data['I'] + 1):
+    for i in range(data['I'] + data['I_opt_out']):
         lb.append(data['lb_p'][i])
         ub.append(data['ub_p'][i])
     # Utility variables
     if 'R_coef' in data.keys():
-        for i in range(data['I'] + 1):
+        for i in range(data['I'] + data['I_opt_out']):
             for n in range(data['N']):
                 for r in range(data['R_coef']):
                     lb.append(data['lb_U'][i, n, r])
                     ub.append(data['ub_U'][i, n, r])
     else:
-        for i in range(data['I'] + 1):
+        for i in range(data['I'] + data['I_opt_out']):
             for n in range(data['N']):
                 lb.append(data['lb_U'][i, n])
                 ub.append(data['ub_U'][i, n])
     # Choice variables
-    for i in range(data['I'] + 1):
+    for i in range(data['I'] + data['I_opt_out']):
         for n in range(data['N']):
             lb.append(0.0)
             ub.append(1.0)
     # Capacity variables
     if 'capacity' in data.keys():
-        for i in range(data['I'] + 1):
+        for i in range(data['I'] + data['I_opt_out']):
             for n in range(data['N']):
                 lb.append(0.0)
                 ub.append(1.0)
@@ -677,52 +681,53 @@ def main(data, tol=1e-3):
     cl = []
     cu = []
     # Probabilistic choice constraints
-    for i in range(data['I'] + 1):
+    for i in range(data['I'] + data['I_opt_out']):
         for n in range(data['N']):
             cl.append(-tol)
             cu.append(tol)
     # Utility value constraints
     if 'R_coef' in data.keys():
         # Mixed logit
-        for i in range(data['I'] + 1):
+        for i in range(data['I'] + data['I_opt_out']):
             for n in range(data['N']):
                 for r in range(data['R_coef']):
                     cl.append(-tol)
                     cu.append(tol)
     else:
         # Logit
-        for i in range(data['I'] + 1):
+        for i in range(data['I'] + data['I_opt_out']):
             for n in range(data['N']):
                 cl.append(-tol)
                 cu.append(tol)
     # Fixed prices constraints
     if 'optimizer' in data.keys():
-        for i in range(data['I'] + 1):
+        for i in range(data['I'] + data['I_opt_out']):
             if data['operator'][i] != data['optimizer']:
                 cl.append(-tol)
                 cu.append(tol)
     # Capacity constraints
     if 'capacity' in data.keys():
         # Ensure that y is a binary variable
-        for i in range(data['I'] + 1):
+        for i in range(data['I'] + data['I_opt_out']):
             for n in range(data['N']):
                 cl.append(-tol)
                 cu.append(tol)
         # opt-out is always an available option
-        for n in range(data['N']):
-            cl.append(1.0 - tol)
-            cu.append(1.0 + tol)
+        for i in range(data['I_opt_out']):
+            for n in range(data['N']):
+                cl.append(1.0 - tol)
+                cu.append(1.0 + tol)
         # Capacity is not exceeded
-        for i in range(data['I'] + 1):
+        for i in range(data['I'] + data['I_opt_out']):
             cl.append(-data['capacity'][i] - tol)
             cu.append(tol)
         # Priority list, if y is 0 then the max capacity is reached
-        for i in range(1, data['I'] + 1):
+        for i in range(data['I'] + data['I_opt_out']):
             for n in range(data['N']):
                 cl.append(-data['N'] - 1.0 - tol)
                 cu.append(1.0 + tol)
         # Priority list, if y is 1 then there is free room
-        for i in range(1, data['I'] + 1):
+        for i in range(data['I'] + data['I_opt_out']):
             for n in range(data['N']):
                 # This type of constraint is revelant only if the capacity could be exceeded
                 if data['priority_list'][i, n] > data['capacity'][i]:
@@ -765,6 +770,7 @@ def main(data, tol=1e-3):
     nlp.addOption('constr_viol_tol', tol)
 
     ### Solve the IPOPT problem
+    print('\n--- Solve the IPOPT problem ----')
     x, info = nlp.solve(x0)
 
     # Change the sign of the optimal objective function value
@@ -774,11 +780,15 @@ def main(data, tol=1e-3):
     # Print the solution
     printSolution(data, x, info)
     # Get the index of the choice variables
-    choice_start = data['I'] + 1 + data['N']*(data['I'] + 1)
-    choice_end = data['I'] + 1 + 2*data['N']*(data['I'] + 1)
+    if 'R_coef' in data.keys():
+        choice_start = data['I'] + data['I_opt_out'] + data['N']*(data['I'] + data['I_opt_out'])*data['R_coef']
+        choice_end = data['I'] + data['I_opt_out'] + data['N']*(data['I'] + data['I_opt_out'])*data['R_coef'] + data['N']*(data['I'] + data['I_opt_out'])
+    else:
+        choice_start = data['I'] + data['I_opt_out'] + data['N']*(data['I'] + data['I_opt_out'])
+        choice_end = data['I'] + data['I_opt_out'] + 2*data['N']*(data['I'] + data['I_opt_out'])
 
     # Return the price, choice, whole solution and info variables
-    return x[:data['I'] + 1], x0[choice_start:choice_end], x, info['status'], info['status_msg']
+    return x[:data['I'] + data['I_opt_out']], x0[choice_start:choice_end], x, info['status'], info['status_msg']
 
 def getInitialPoint(data, previous_solution=None):
     ''' Compute an initial feasible solution to the best response game.
@@ -787,17 +797,17 @@ def getInitialPoint(data, previous_solution=None):
         If a previous solution is given, polish it.
         Args:
             data                data for the MINLP Stackelberg formulation [dict]
-            previous_solution   solution of the previous iterative of the sequential game
+            previous_solution   solution of the previous iterative of the sequential game [list]
     '''
 
-    print('\n--- Compute an feasible solution x0 ----')
+    print('\n--- Compute a feasible solution x0 ----')
     x0 = []
     # count is used to keep track of the variable index
     count = 0
 
     # Price variables
-    p_index = np.empty([data['I'] + 1], dtype = int)
-    for i in range(data['I'] + 1):
+    p_index = np.empty([data['I'] + data['I_opt_out']], dtype = int)
+    for i in range(data['I'] + data['I_opt_out']):
         if 'operator' in data.keys() and data['operator'][i] != data['optimizer']:
             x0.append(data['p_fixed'][i])
         else:
@@ -811,8 +821,8 @@ def getInitialPoint(data, previous_solution=None):
     # Utility variables
     if 'R_coef' in data.keys():
         # Mixed Logit
-        u_index = np.empty([data['I'] + 1, data['N'], data['R_coef']], dtype = int)
-        for i in range(data['I'] + 1):
+        u_index = np.empty([data['I'] + data['I_opt_out'], data['N'], data['R_coef']], dtype = int)
+        for i in range(data['I'] + data['I_opt_out']):
             for n in range(data['N']):
                 for r in range(data['R_coef']):
                     x0.append(data['endo_coef'][i, n, r]*x0[p_index[i]] + data['exo_utility'][i, n, r])
@@ -820,8 +830,8 @@ def getInitialPoint(data, previous_solution=None):
                     count += 1
     else:
         # Logit
-        u_index = np.empty([data['I'] + 1, data['N']], dtype = int)
-        for i in range(data['I'] + 1):
+        u_index = np.empty([data['I'] + data['I_opt_out'], data['N']], dtype = int)
+        for i in range(data['I'] + data['I_opt_out']):
             for n in range(data['N']):
                 x0.append(data['endo_coef'][i, n]*x0[p_index[i]] + data['exo_utility'][i, n])
                 u_index[i, n] = count
@@ -831,15 +841,15 @@ def getInitialPoint(data, previous_solution=None):
     # TODO: Explain how they are computed
     if 'capacity' in data.keys():
         # Capacitated model
-        # Initiial Choice variables
-        w_index = np.empty([data['I'] + 1, data['N']], dtype = int)
+        # Initial Choice variables
+        w_index = np.empty([data['I'] + data['I_opt_out'], data['N']], dtype = int)
         for i in range(data['I'] + 1):
             for n in range(data['N']):
                 x0.append(1.0)
                 w_index[i, n] = count
                 count += 1
         # Initial Availability variables
-        y_index = np.empty([data['I'] + 1, data['N']], dtype = int)
+        y_index = np.empty([data['I'] + data['I_opt_out'], data['N']], dtype = int)
         for i in range(data['I'] + 1):
             for n in range(data['N']):
                 x0.append(1.0)
@@ -850,26 +860,26 @@ def getInitialPoint(data, previous_solution=None):
         feasible = False
         while feasible is False:
             # Choice variables
-            for i in range(data['I'] + 1):
+            for i in range(data['I'] + data['I_opt_out']):
                 for n in range(data['N']):
                     if 'R_coef' in data.keys():
                         # Mixed Logit
                         sum = 0.0
                         for r in range(data['R_coef']):
                             numerator = np.exp(x0[u_index[i, n, r]])*x0[y_index[i, n]]
-                            denominator = np.sum([np.exp(x0[u_index[j, n, r]])*x0[y_index[j, n]] for j in range(data['I'] + 1)])
+                            denominator = np.sum([np.exp(x0[u_index[j, n, r]])*x0[y_index[j, n]] for j in range(data['I'] + data['I_opt_out'])])
                             sum += float(numerator)/denominator
                         sum = sum/data['R_coef']
                         x0[w_index[i, n]] = sum
                     else:
                         # Logit
-                        denominator = np.sum([np.exp(x0[u_index[j, n]])*x0[y_index[j, n]] for j in range(data['I'] + 1)])
+                        denominator = np.sum([np.exp(x0[u_index[j, n]])*x0[y_index[j, n]] for j in range(data['I'] + data['I_opt_out'])])
                         numerator = np.exp(x0[u_index[i, n]])*x0[y_index[i, n]]
                         x0[w_index[i, n]] = float(numerator)/denominator
             # Check if the solution is feasible
             feasible = True
             capa = copy.deepcopy(data['capacity'])
-            for i in range(data['I'] + 1):
+            for i in range(data['I'] + data['I_opt_out']):
                 occupancy = 0.0
                 for n in range(data['N']):
                     occupancy += x0[w_index[i, n]]
@@ -889,15 +899,15 @@ def getInitialPoint(data, previous_solution=None):
     else:
         # Uncapacitated
         # Choice variables
-        w_index = np.empty([data['I'] + 1, data['N']], dtype = int)
-        for i in range(data['I'] + 1):
+        w_index = np.empty([data['I'] + data['I_opt_out'], data['N']], dtype = int)
+        for i in range(data['I'] + data['I_opt_out']):
             for n in range(data['N']):
                 if 'R_coef' in data.keys():
                     # Mixed Logit
                     sum = 0.0
                     for r in range(data['R_coef']):
                         numerator = np.exp(x0[u_index[i, n, r]])
-                        denominator = np.sum([np.exp(x0[u_index[j, n, r]]) for j in range(data['I'] + 1)])
+                        denominator = np.sum([np.exp(x0[u_index[j, n, r]]) for j in range(data['I'] + data['I_opt_out'])])
                         sum += float(numerator)/denominator
                     sum = sum/data['R_coef']
                     x0.append(sum)
@@ -906,7 +916,7 @@ def getInitialPoint(data, previous_solution=None):
                 else:
                     # Logit
                     numerator = np.exp(x0[u_index[i, n]])
-                    denominator = np.sum([np.exp(x0[u_index[j, n]]) for j in range(data['I'] + 1)])
+                    denominator = np.sum([np.exp(x0[u_index[j, n]]) for j in range(data['I'] + data['I_opt_out'])])
                     x0.append(float(numerator)/denominator)
                     w_index[i, n] = count
                     count += 1
@@ -919,27 +929,26 @@ def printSolution(data, x, info):
     print('Decision variables: \n')
     counter = 0
     # Price variables
-    for i in range(data['I'] + 1):
+    for i in range(data['I'] + data['I_opt_out']):
         print('Price of alternative %r: %r'%(i, x[counter]))
         counter += 1
     print('\n')
     '''
     # Utility variables
-    for i in range(data['I'] + 1):
+    for i in range(data['I'] + data['I_opt_out']):
         for n in range(data['N']):
             print('Utility of alternative %r for user %r : %r'%(i, n, x[counter]))
             counter += 1
     print('\n')
-    #TODO: Compute the revenue/market share
     # Choice variables
-    for i in range(data['I'] + 1):
+    for i in range(data['I'] + data['I_opt_out']):
         for n in range(data['N']):
             print('Choice of alternative %r for user %r : %r'%(i, n, x[counter]))
             counter += 1
     print('\n')
     # Availability variables
     if 'capacity' in data.keys():
-        for i in range(data['I'] + 1):
+        for i in range(data['I'] + data['I_opt_out']):
             for n in range(data['N']):
                 print('Availability of alternative %r for user %r : %r'%(i, n, x[counter]))
                 counter += 1

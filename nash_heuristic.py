@@ -10,12 +10,13 @@ import copy
 import math
 import random
 import warnings
+import itertools
 # Ipopt
 import ipopt
 # Numpy
 import numpy as np
 # Data
-import Data.Non_linear_Stackelberg.ProbLogit_n10 as data_file
+import Data.Italian.Non_linear_Stackelberg.ProbLogit_n40 as data_file
 import non_linear_stackelberg
 
 class NashHeuristic(object):
@@ -23,13 +24,15 @@ class NashHeuristic(object):
         ''' Construct a Nash Heuristic game.
             KeywordArgs:
                 K                  Number of operators [int]
-                I                  Number of alternatives [int]
+                I                  Number of alternatives (without opt-out) [int]
+                I_opt_out          Number of opt-out alternatives [int]
                 operator           Mapping between alternatives and operators [list]
                 endo_var           Mapping between alternatives and endogene variables [dict]
                 tolerance          Tolerance used for the cycle detection [float]
         '''
-        self.K = kwargs.get('K')
-        self.I = kwargs.get('I')
+        self.K = kwargs.get('K', 2)
+        self.I = kwargs.get('I', 2)
+        self.I_opt_out = kwargs.get('I_opt_out', 1)
         # TODO: For the moment, an operator is in charge of exactly one alternative
         self.operator = kwargs.get('operator')
         # TODO: For the moment, suppose endo_var contains only the price
@@ -39,9 +42,8 @@ class NashHeuristic(object):
         self.tolerance = kwargs.get('tolerance', 1e-3)
         # Set the optimizer to be the first operator
         self.optimizer = 1
-        # Optimizer id in the beggining of the current run
+        # Optimizer id at the beggining of the current run
         self.initial_optimizer = self.optimizer
-
         # Mapping between an integer and an operator's specific strategy
         self.mapping = [[] for n in range(self.K + 1)]
         # Seed
@@ -54,7 +56,11 @@ class NashHeuristic(object):
             an index. The strategy belongs to the finite strategy set of the operator.
         '''
         for k in range(1, self.K + 1):
-            for i in range(1, self.I + 1):
+            # Keep track of all the strategy of the current operator
+            strategies = []
+            for i in range(self.I_opt_out, self.I + self.I_opt_out):
+                # Keep track of the strategy of the current alternative
+                strategy = []
                 if self.operator[i] == k:
                     # Get the endogenous variables corresponding to the alternative
                     vars = self.endo_var[i]
@@ -70,12 +76,21 @@ class NashHeuristic(object):
                             range_ub = [var['lb'] + (n + 1) * (var['ub'] - var['lb'])/var['step']
                                         for n in range(var['step'])]
                         else:
-                            raise NotImplementedError('To be implemented')
+                            raise NotImplementedError('Domain of the variable is not continuous. To be implemented')
                         # Mapping between the strategy in the finite strategy set and an index (key)
                         for n in range(var['step']):
                             # For the moment we suppose that the price is the only endogenous
                             # variables. Each strategy is added to the corresponding operator strategy set
-                            self.mapping[k].append({key: [round(range_lb[n], 3), round(range_ub[n], 3)]})
+                            strategy.append({i: [round(range_lb[n], 3), round(range_ub[n], 3)]})
+                        strategies.append(strategy)
+            self.mapping[k] = list(itertools.product(*strategies))
+        # Merge the alternative strategies in the same dictionary to represent an operator strategy
+        for k in range(1, self.K + 1):
+            for s in range(len(self.mapping[k])):
+                strat = {}
+                for i_k in range(len(self.mapping[k][s])):
+                    strat.update(self.mapping[k][s][i_k])
+                self.mapping[k][s] = strat
 
     def constructTables(self):
         ''' Construct the tables. Each table represents all the possible configurations
@@ -133,7 +148,7 @@ class NashHeuristic(object):
                 iteration_to_check = range(iter-self.K, 0, -self.K)
                 for j in iteration_to_check:
                     cycle = True
-                    for i in range(self.I + 1):
+                    for i in range(self.I + self.I_opt_out):
                         if abs(p_history[j][i] - p_history[iter][i]) > self.tolerance:
                             cycle = False
                     if cycle is True:
@@ -196,11 +211,11 @@ class NashHeuristic(object):
                 p_history          price history of the cycle [list]
         '''
         score = 0
-        for i in range(1, self.I + 1):
+        for i in range(self.I_opt_out, self.I + self.I_opt_out):
             history = [price[i] for price in p_history]
             p_min = min(history)
             p_max = max(history)
-            score += p_max-p_min
+            score += p_max - p_min
 
         return score
 
@@ -216,27 +231,34 @@ class NashHeuristic(object):
         '''
         # Keep track of the strategy indices of the current configuration
         reverse_indices = []
-        for i, price in enumerate(prices):
-            if (i > 0) and (self.operator[i] != self.optimizer):
-                # Compute the index of the strategy of the alternative i
-                lb = self.endo_var[i]['p']['lb']
-                ub = self.endo_var[i]['p']['ub']
-                step = self.endo_var[i]['p']['step']
-                if price == ub:
-                    # the upper bound is located in the last subset
-                    reverse_index = math.floor( (price-lb)*step/(ub-lb)) - 1
-                else:
-                    reverse_index = math.floor( (price-lb)*step/(ub-lb))
-                reverse_indices.append(reverse_index)
+        competitor_history = [(i, price) for i, price in enumerate(prices) if (i >= self.I_opt_out) and (self.operator[i] != self.optimizer)]
+        for i, price in competitor_history:
+            # Compute the index of the strategy of the alternative i
+            lb = self.endo_var[i]['p']['lb']
+            ub = self.endo_var[i]['p']['ub']
+            step = self.endo_var[i]['p']['step']
+            if price == ub:
+                # the upper bound is located in the last subset
+                reverse_index = math.floor((price-lb)*step/(ub-lb)) - 1
+            else:
+                reverse_index = math.floor((price-lb)*step/(ub-lb))
+            reverse_indices.append(reverse_index)
+        # TODO: Clean the lines below
+        if len(reverse_indices) == 1:
+            reverse_indices = reverse_indices[0]
+        elif len(reverse_indices) == 2:
+            reverse_indices = step*reverse_indices[0] + reverse_indices[1]
+        elif len(reverse_indices) > 2:
+            raise NotImplementedError('To be implemented')
+
         if self.K == 2:
-            # reverse_indices contains only one entry
-            table_value = self.tables[self.optimizer - 1][reverse_indices[0]]
+            table_value = self.tables[self.optimizer - 1][reverse_indices]
             if table_value >= 0:
                 print('The next configuration \n Optimizer: %r \n Prices: %r \n\
 has already been visited before.'%(self.optimizer, prices))
                 if table_value % 1 == 0:
                     # The current configuration has already been visited in the CURRENT run
-                    return True, self.tables[self.optimizer - 1][reverse_indices[0]]
+                    return True, self.tables[self.optimizer - 1][reverse_indices]
                 else:
                     # The current configuration has already been visited in a PREVIOUS run
                     return True, None
@@ -246,7 +268,7 @@ has already been visited before.'%(self.optimizer, prices))
         # The current configuration has not been visited before.
         # Mark its entry to keep track of it
         # Update the current configuration in the table
-        self.tables[self.optimizer - 1][reverse_indices[0]] = iter
+        self.tables[self.optimizer - 1][reverse_indices] = iter
 
         return False, None
 
@@ -265,40 +287,47 @@ has already been visited before.'%(self.optimizer, prices))
         for (iter, prices) in enumerate(p_history):
             # Get the strategy indices for the current operators's strategy defined by prices
             reverse_indices = []
-            for (i, price) in enumerate(prices):
-                if (i > 0) and (self.operator[i] != current_oper):
-                    lb = self.endo_var[i]['p']['lb']
-                    ub = self.endo_var[i]['p']['ub']
-                    step = self.endo_var[i]['p']['step']
-                    if price == ub:
-                        # the upper bound on the price is located in the last subset
-                        reverse_index = math.floor( (price-lb)*step/(ub-lb)) - 1
-                    else:
-                        reverse_index = math.floor( (price-lb)*step/(ub-lb))
-                    reverse_indices.append(reverse_index)
+            competitor_history = [(i, price) for i, price in enumerate(prices) if (i >= self.I_opt_out) and (self.operator[i] != current_oper)]
+            for i, price in competitor_history:
+                # Compute the index of the strategy of the alternative i
+                lb = self.endo_var[i]['p']['lb']
+                ub = self.endo_var[i]['p']['ub']
+                step = self.endo_var[i]['p']['step']
+                if price == ub:
+                    # the upper bound is located in the last subset
+                    reverse_index = math.floor((price-lb)*step/(ub-lb)) - 1
+                else:
+                    reverse_index = math.floor((price-lb)*step/(ub-lb))
+                reverse_indices.append(reverse_index)
+            # TODO: Clean the lines below
+            if len(reverse_indices) == 1:
+                reverse_indices = reverse_indices[0]
+            elif len(reverse_indices) == 2:
+                reverse_indices = step*reverse_indices[0] + reverse_indices[1]
+            elif len(reverse_indices) > 2:
+                raise NotImplementedError('To be implemented')
             if self.K == 2:
                 # Update the table
                 if score == np.inf:
-                    self.tables[current_oper - 1][reverse_indices[0]] = np.inf
+                    self.tables[current_oper - 1][reverse_indices] = np.inf
                 else:
                     if len(p_history) - iter <= length:
-                        self.tables[current_oper - 1][reverse_indices[0]] = score
+                        self.tables[current_oper - 1][reverse_indices] = score
                     else:
                         # Iteration number is not part of the cycle
-                        self.tables[current_oper - 1][reverse_indices[0]] = np.inf
+                        self.tables[current_oper - 1][reverse_indices] = np.inf
             else:
                 raise NotImplementedError('To be implemented')
 
             #### Update the initial state for the next run
-            if (current_oper == self.initial_state[0]) and (reverse_indices[0] == self.initial_state[1]):
+            if (current_oper == self.initial_state[0]) and (reverse_indices == self.initial_state[1]):
                 not_found = True
                 while not_found:
                     # Try to increment the strategy index of the operator in initial_state
                     self.initial_state[1] += 1
                     if self.initial_state[1] == len(self.mapping[current_oper]):
-                        # All the strategy indices of the operation in initial_state have been visited.
-                        # The next operator starts
-                        # Completed the remaining entries in the tables with infinity
+                        # All the strategy indices of the operator in initial_state have been visited.
+                        # Complete the remaining entries in the tables with infinity
                         for k in range(len(self.tables)):
                             for strat in range(len(self.tables[k])):
                                 if self.tables[k][strat] < 0:
@@ -334,18 +363,16 @@ has already been visited before.'%(self.optimizer, prices))
             data['optimizer'] = self.initial_state[0]
             self.optimizer = self.initial_state[0]
             # Compute the initial fixed prices of the initial state
-            p_fixed = []
-            for i in range(self.I + 1):
-                if i == 0:
-                    p_fixed.append(0.0)
-                elif self.operator[i] == self.initial_state[0]:
-                    p_fixed.append(-1.0)
+            p_fixed = copy.deepcopy(data['lb_p'])
+            for i in range(self.I_opt_out, self.I + self.I_opt_out):
+                if self.operator[i] == self.initial_state[0]:
+                    p_fixed[i] = -1.0
                 else:
                     lb = self.endo_var[i]['p']['lb']
                     ub = self.endo_var[i]['p']['ub']
                     step = self.endo_var[i]['p']['step']
-                    p_fixed.append(random.uniform(lb + self.initial_state[1]*(ub-lb)/step,
-                                                  lb + (self.initial_state[1] + 1)*(ub-lb)/step))
+                    p_fixed[i] = random.uniform(self.mapping[self.operator[i]][self.initial_state[1]][i][0],
+                                                self.mapping[self.operator[i]][self.initial_state[1]][i][1])
 
             data['p_fixed'] = copy.deepcopy(np.asarray(p_fixed))
             # Run the sequential game
@@ -363,8 +390,8 @@ has already been visited before.'%(self.optimizer, prices))
             # The operator index starts at 1. 0 is opt-out
             print('\nOptimizer %r' %(k + 1))
             print('Prices \t\t Nash Equilibrium found\n')
-            for (p_range, value) in zip(self.mapping[k + 1], self.tables[k]):
-                print('%r \t\t %r' %(list(p_range.values())[0], value))
+            for (p_range, value) in zip(self.mapping[((k+1)%2) + 1], self.tables[k]):
+                print('%r \t\t\t\t\t %r' %(p_range, value))
 
 if __name__ == '__main__':
     # Get the data and preprocess
@@ -374,17 +401,22 @@ if __name__ == '__main__':
 
     # Define the keywords arguments
     nash_dict = {'K': 2,
-                'I': 2,
-                'operator': [0, 1, 2],
+                'operator': [0, 0, 0, 0, 1, 1, 2, 2],
                 'optimizer': 1,
-                'endo_var': {0:{'p':{'domain': 'C', 'lb': 0.0, 'ub': 0.0, 'step':1}},
-                            1:{'p':{'domain': 'C', 'lb': 0.0, 'ub': 1.0, 'step':20}},
-                            2:{'p':{'domain': 'C', 'lb': 0.0, 'ub': 1.0, 'step':20}}},
+                'endo_var': {0:{'p':{'domain': 'C', 'lb': data['lb_p'][0], 'ub': data['ub_p'][0], 'step':1}},
+                            1:{'p':{'domain': 'C', 'lb': data['lb_p'][1], 'ub': data['ub_p'][1], 'step':1}},
+                            2:{'p':{'domain': 'C', 'lb': data['lb_p'][2], 'ub': data['ub_p'][2], 'step':1}},
+                            3:{'p':{'domain': 'C', 'lb': data['lb_p'][3], 'ub': data['ub_p'][3], 'step':1}},
+                            4:{'p':{'domain': 'C', 'lb': data['lb_p'][4], 'ub': data['ub_p'][4], 'step':20}},
+                            5:{'p':{'domain': 'C', 'lb': data['lb_p'][5], 'ub': data['ub_p'][5], 'step':20}},
+                            6:{'p':{'domain': 'C', 'lb': data['lb_p'][6], 'ub': data['ub_p'][6], 'step':20}},
+                            7:{'p':{'domain': 'C', 'lb': data['lb_p'][7], 'ub': data['ub_p'][7], 'step':20}}},
                 'seed': 1
                 }
-    # Instanciate and run the heuristic game
-    game = NashHeuristic(**nash_dict)
+
     data.update(nash_dict)
+    # Instanciate and run the heuristic game
+    game = NashHeuristic(**data)
     game.run(data)
     t_1 = time.time()
     print('TOTAL TIMING: %r' %(t_1 - t_0))

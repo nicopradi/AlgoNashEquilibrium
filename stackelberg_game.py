@@ -9,14 +9,15 @@ from cplex.exceptions import CplexSolverError
 # numpy
 import numpy as np
 # data
-import Data.Stackelberg.MILPLogit_n10r100 as data_file
+import Data.Italian.Stackelberg.MILPLogit_n40r50 as data_file
 
 class Stackelberg:
 
     def __init__(self, **kwargs):
         ''' Construct a Stackelberg game
             KeywordArgs:
-                I               Number of alternatives [int]
+                I               Number of alternatives (without opt-out) [int]
+                I_opt_out       Number of opt-out alternatives [int]
                 N               Number of customers [int]
                 R               Number of draws [int]
                 choice_set      Individual choice sets [list]
@@ -31,7 +32,7 @@ class Stackelberg:
                 endo_coef       Beta coefficient of the endogene variables [list]
                 xi              Error term values [list]
                 #### Optional kwargs ####
-                operator        Mapping between alternative and operators [int]
+                operator        Index of the operator playing its best reponse strategy [int]
                 optimizer       Index of the current operator [list]
                 p_fixed         Fixed price of the alternatives managed by other operators [list]
                 y_fixed         Fixed availability of the alternatives managed by other operators [list]
@@ -40,14 +41,16 @@ class Stackelberg:
 
         '''
         ## TODO: Check correctness of the attributes value ?
+        # Keyword arguments
         self.I = kwargs.get('I', 2)
+        self.I_opt_out = kwargs.get('I_opt_out', 1)
         self.N = kwargs.get('N', 10)
         self.R = kwargs.get('R', 50)
         self.choice_set = kwargs.get('choice_set', None)
         self.capacity = kwargs.get('capacity', None)
         self.priority_list = kwargs.get('priority_list', None)
-        self.lb_p = kwargs.get('lb_p', np.zeros(self.I + 1))
-        self.ub_p = kwargs.get('ub_p', np.zeros(self.I + 1))
+        self.lb_p = kwargs.get('lb_p', np.zeros(self.I + self.I_opt_out))
+        self.ub_p = kwargs.get('ub_p', np.zeros(self.I + self.I_opt_out))
         self.lb_Umin = kwargs.get('lb_Umin')
         self.ub_Umax = kwargs.get('ub_Umax')
         self.M = kwargs.get('M')
@@ -75,7 +78,7 @@ class Stackelberg:
         # Add the fixed cost to the objective function
         if self.fixed_cost is not None:
             initial_cost = 0.0
-            for i in range(1, self.I + 1):
+            for i in range(self.I_opt_out, self.I + self.I_opt_out):
                 if (self.optimizer is None) or (self.operator[i] == self.optimizer):
                     # Alternative i is managed by the optimizer
                     initial_cost += self.fixed_cost[i]
@@ -83,26 +86,26 @@ class Stackelberg:
 
         ##### Add the decision variables #####
         # Availability at scenario level variables
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             for n in range(self.N):
                 for r in range(self.R):
                     model.variables.add(types = [model.variables.type.binary],
                                         names = ['y_scen[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']'])
 
         # Availability at operator level variables
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             model.variables.add(types = [model.variables.type.binary],
                                 names = ['y[' + str(i) + ']'])
 
         # Customer choice variables
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             for n in range(self.N):
                 for r in range(self.R):
                     model.variables.add(types = [model.variables.type.binary],
                                         names = ['w[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']'])
 
         # Utility variables
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             for n in range(self.N):
                 for r in range(self.R):
                     model.variables.add(types = [model.variables.type.continuous],
@@ -110,7 +113,7 @@ class Stackelberg:
                                         names = ['U[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']'])
 
         # Discounted utility
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             for n in range(self.N):
                 for r in range(self.R):
                     model.variables.add(types = [model.variables.type.continuous],
@@ -125,16 +128,16 @@ class Stackelberg:
                                     names = ['Umax[' + str(n) + ']' + '[' + str(r) + ']'])
 
         # Price variables
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             model.variables.add(types = [model.variables.type.continuous],
                                lb = [-cplex.infinity], ub = [cplex.infinity],
                                names = ['p[' + str(i) + ']'])
 
         # Linearized choice-price variables
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             for n in range(self.N):
                 for r in range(self.R):
-                    if (i > 0) and ((self.optimizer is None) or (self.operator[i] == self.optimizer)):
+                    if (i >= self.I_opt_out) and ((self.optimizer is None) or (self.operator[i] == self.optimizer)):
                         model.variables.add(obj = [1.0/self.R], types = [model.variables.type.continuous],
                                             lb = [-cplex.infinity], ub = [cplex.infinity],
                                             names = ['alpha[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']'])
@@ -144,7 +147,7 @@ class Stackelberg:
                                             names = ['alpha[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']'])
 
         # Auxiliary variable to calculate the demand
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             if self.customer_cost is not None:
                 # Add customer cost in the objective function
                 if (self.optimizer is None) or (self.operator[i] == self.optimizer):
@@ -166,8 +169,8 @@ class Stackelberg:
         ##### Fixed price and alternatives availability constraints
         # The price/availability of the alternatives not managed by the current optimizer are fixed
         if self.p_fixed is not None:
-            for i in range(self.I + 1):
-                if (i > 0) and (self.operator[i] != self.optimizer):
+            for i in range(self.I + self.I_opt_out):
+                if (i >= self.I_opt_out) and (self.operator[i] != self.optimizer):
                     indices = ['p[' + str(i) + ']']
                     coefs = [1.0]
                     model.linear_constraints.add(lin_expr = [[indices, coefs]],
@@ -185,7 +188,7 @@ class Stackelberg:
             for r in range(self.R):
                 indices = []
                 coefs = []
-                for i in range(self.I + 1):
+                for i in range(self.I + self.I_opt_out):
                     indices.append('w[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']')
                     coefs.append(1.0)
                 model.linear_constraints.add(lin_expr = [[indices, coefs]],
@@ -193,7 +196,7 @@ class Stackelberg:
                                              rhs = [1.0])
 
         # Customer can only choose an option that is available at scenario level
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             for n in range(self.N):
                 for r in range(self.R):
                     indices = ['w[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
@@ -204,7 +207,7 @@ class Stackelberg:
                                                  rhs = [0.0])
 
         # Availability at scenario level is subject to availability at operator level
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             for n in range(self.N):
                 for r in range(self.R):
                     indices = ['y_scen[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
@@ -217,15 +220,16 @@ class Stackelberg:
         # Opt out is always available at scenario level
         for n in range(self.N):
             for r in range(self.R):
-                indices = ['y_scen[' + str(0) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
-                coefs = [1.0]
-                model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                             senses = 'E',
-                                             rhs = [1.0])
+                for i in range(self.I_opt_out):
+                    indices = ['y_scen[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
+                    coefs = [1.0]
+                    model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                 senses = 'E',
+                                                 rhs = [1.0])
 
         # Alternative not available at scenerio level if not included in the choice_set
         if self.choice_set is not None:
-            for i in range(self.I + 1):
+            for i in range(self.I + self.I_opt_out):
                 for n in range(self.N):
                     for r in range(self.R):
                         if self.choice_set[i, n] == 0:
@@ -238,7 +242,7 @@ class Stackelberg:
         ##### Capacity constraints
         if self.capacity is not None:
             # Demand does not exceed capacity
-            for i in range(1, self.I + 1):
+            for i in range(self.I + self.I_opt_out):
                 for r in range(self.R):
                     indices = []
                     coefs = []
@@ -251,7 +255,7 @@ class Stackelberg:
 
             # Priority list: if alternative not available at scenario level,
             # then the capacity is reached, or the alternative is not available in the choice set
-            for i in range(1, self.I + 1):
+            for i in range(self.I + self.I_opt_out):
                 for n in range(self.N):
                     for r in range(self.R):
                         indices = []
@@ -271,7 +275,7 @@ class Stackelberg:
 
             # Priority list: if alternative is available at scenario level,
             # then there is still some free capacity for the customer
-            for i in range(1, self.I + 1): # Do not consider opt-out
+            for i in range(self.I + self.I_opt_out):
                 for r in range(self.R):
                     for n in range(self.N):
                         if (self.priority_list[i, n] > self.capacity[i]) and \
@@ -292,7 +296,7 @@ class Stackelberg:
 
         #### Price constraints
         # Bound on the price for each alternatives
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             indices = ['p[' + str(i) + ']']
             coefs = [1.0]
             model.linear_constraints.add(lin_expr = [[indices, coefs]],
@@ -303,7 +307,7 @@ class Stackelberg:
                                          rhs = [self.ub_p[i]])
 
         # Linearized price: alpha is equal to 0 if alternative is not choosen
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             for n in range(self.N):
                 for r in range(self.R):
                     indices = ['w[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
@@ -322,7 +326,7 @@ class Stackelberg:
                                                  rhs = [0.0])
 
         # Linearized price: alpha is equal to the price if alternative is chosen
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             for n in range(self.N):
                 for r in range(self.R):
                     indices = ['p[' + str(i) + ']',
@@ -342,7 +346,7 @@ class Stackelberg:
                                                  rhs = [0.0])
 
         #### Utility constraints
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             for n in range(self.N):
                 for r in range(self.R):
                     indices = ['U[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
@@ -363,7 +367,7 @@ class Stackelberg:
         #### Discounted utility constraints
         if self.capacity is not None:
             # Capacitated model
-            for i in range(self.I + 1):
+            for i in range(self.I + self.I_opt_out):
                 for n in range(self.N):
                     for r in range(self.R):
                         # Discounted utility greater than utility lower bound
@@ -396,7 +400,7 @@ class Stackelberg:
                                                      rhs = [0.0])
         else:
             # Uncapacitated model
-            for i in range(self.I + 1):
+            for i in range(self.I + self.I_opt_out):
                 for n in range(self.N):
                     for r in range(self.R):
                         indices = ['z[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
@@ -409,7 +413,7 @@ class Stackelberg:
 
         #### Utility maximization constraints
         # The selected alternative is the one with the highest utility
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             for n in range(self.N):
                 for r in range(self.R):
                     indices = ['z[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']',
@@ -427,7 +431,7 @@ class Stackelberg:
                                                  rhs = [self.M[n, r]])
 
         #### Auxiliary constraints to compute the demand
-        for i in range(self.I + 1):
+        for i in range(self.I + self.I_opt_out):
             indices = []
             coefs = []
             for n in range(self.N):
@@ -451,16 +455,17 @@ class Stackelberg:
         '''
         try:
             print("--SOLUTION : --")
-            # Do not print the solver output 
+            # Do not print the solver output
             #model.set_results_stream(None)
             #model.set_warning_stream(None)
             model.solve()
-            print('Objective function value: %r' %model.solution.get_objective_value())
-            for i in range(self.I +1):
+            print('Objective function value (benefit): %r' %model.solution.get_objective_value())
+            for i in range(self.I  + self.I_opt_out):
                 print('Price of alt %r : %r' %(i, model.solution.get_values('p[' + str(i) + ']')))
+                print('Demand of alt %r : %r' %(i, model.solution.get_values('d[' + str(i) + ']')))
             return model
         except CplexSolverError as e:
-            print('Exception raised during dual of restricted problem')
+            raise Exception('Exception raised during dual of restricted problem')
 
 if __name__ == '__main__':
     # Get the data and preprocess

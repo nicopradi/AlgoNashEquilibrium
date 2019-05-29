@@ -13,8 +13,8 @@ from cplex.exceptions import CplexSolverError
 # numpy
 import numpy as np
 # data
-import Data.Stackelberg.MILPLogit_n10r100 as data_file
-import Data.Non_linear_Stackelberg.ProbMixedLogit_n10r50 as data_file_2
+import Data.Italian.Stackelberg.MILPLogit_n40r50 as data_file
+import Data.Parking_lot.Non_linear_Stackelberg.ProbMixedLogit_n10r50 as data_file_2
 # Stackelberg
 import stackelberg_game
 import non_linear_stackelberg
@@ -24,12 +24,13 @@ class Sequential:
     def __init__(self, **kwargs):
         ''' Construct a sequential game.
             KeywordArgs:
-                K          Number of operators [int]
-                operator   Mapping between alternatives and operators [list]
-                max_iter   Maximum number of iterations [int]
-                p_fixed    Current prices of the operators [list]
-                y_fixed    Current availabilty of the other operator's alternatives [list]
-                tolerance  Tolerance used for the cycle detection [float]
+                K            Number of operators [int]
+                operator     Mapping between alternatives and operators [list]
+                max_iter     Maximum number of iterations [int]
+                p_fixed      Current prices of the operators [list]
+                y_fixed      Current availabilty of the other operator's alternatives [list]
+                tolerance    Tolerance used for the cycle detection [float]
+                name_mapping Mapping between alternatives id and their names [dict]
         '''
         # Keyword arguments
         self.K = kwargs.get('K', 1)
@@ -49,9 +50,12 @@ class Sequential:
     def run(self, data, linearized=True):
         ''' Run the sequential game with the Stackelberg game
             Args:
-                data:          dictionary containing data to instanciate the Stackelberg game
-                linearized     choice between the linear or non linear formulation fo the Stackelberg game
+                data           dictionary containing data to instanciate the Stackelberg game [dict]
+                linearized     choice between the linear or non linear formulation fo the Stackelberg game [boolean]
         '''
+        # Copy the mapping between alternatives index and their names
+        self.name_mapping = copy.deepcopy(data['name_mapping'])
+        # Start the sequential game
         iter = 0
         cycle = False
         while (iter < self.max_iter) and cycle is False:
@@ -106,7 +110,6 @@ class Sequential:
                 for j in iterations_to_check:
                     cycle = True
                     for i in range(len(self.operator)):
-                        # TODO: Tolerance 1e-3
                         if abs(self.p_history[j, i] - self.p_history[iter, i]) > self.tolerance:
                             cycle = False
                     if cycle is True:
@@ -140,35 +143,43 @@ class Sequential:
         ''' Plot the value of the fixed prices for each optimizer as a function
             of the iterations number.
             Args:
-                title          identification string used to save the graphs
+                title          identification string used to save the graphs [string]
         '''
 
         ### Price graph
         # Get the price history for each operators
-        p_history_1 = [prices[1] for prices in self.p_history if prices[1] != -1]
-        p_history_2 = [prices[2] for prices in self.p_history if prices[2] != -1]
+        p_history = [[] for i in range(len(self.operator))]
+        for i in range(len(self.operator)):
+            p_history[i] = [prices for prices in self.p_history[:,i] if prices != -1]
         # Plot them
-        plt.plot(p_history_2, label='Operator 2 price', color='blue')
-        plt.plot(p_history_1, label='Operator 1 price', color='red')
+        color = {4: 'red', 5: 'lightcoral', 6: 'blue', 7: 'cornflowerblue'}
+        for i in range(len(self.operator)):
+            if self.operator[i] != 0:
+                plt.plot(p_history[i], label='Alternative ' + self.name_mapping[i] + ' price', color=color[i])
         # Plot vertical line to indicate the beginning of the cycle
         if self.cycle_iter is not None:
             plt.axvline(x=self.cycle_iter, linestyle=':', color='black')
         plt.ylabel('Price')
         plt.xlabel('Iteration number')
-        plt.title("Operator's prices as a function of the iteration number. \
-        \n The initial prices are: Operator 1: %r and Operator 2: %r" %(self.p_fixed[1], self.p_fixed[2]))
+        plt.title("Alternatives' price as a function of the iteration number. \
+        \n The initial prices are: %r" %(self.p_fixed))
         plt.legend()
         plt.savefig('price_history_%r.png' %(title))
         plt.close()
 
         ### Benefit graph
         # Get the benefit history for each operators
-        benefit_history_1 = [benefit[1] for benefit in self.benefit if benefit[1] != -1]
-        benefit_history_2 = [benefit[2] for benefit in self.benefit if benefit[2] != -1]
-        benefit_sum = [r1 + r2 for r1, r2 in zip(benefit_history_1, benefit_history_2)]
+        benefit_history = [[] for k in range(self.K + 1)]
+        for k in range(self.K + 1):
+            benefit_history[k] = [benefits for benefits in self.benefit[:, k] if benefits != -1]
+        benefit_sum = []
+        for iter in range(len(benefit_history[0])):
+            benefit_sum.append(sum([benefit_history[k][iter] for k in range(1, self.K + 1)]))
+
         # Plot them
-        plt.plot(benefit_history_2, label='Operator 2 benefit', color='blue')
-        plt.plot(benefit_history_1, label='Operator 1 benefit', color='red')
+        color = {1: 'red', 2: 'blue'}
+        for k in range(1, self.K + 1):
+            plt.plot(benefit_history[k], label='Operator ' + str(k) + ' benefit', color=color[k])
         plt.plot(benefit_sum, '--' ,label='Benefit total', color='green')
         # Plot vertical line to indicate the beginning of the cycle
         if self.cycle_iter is not None:
@@ -176,19 +187,26 @@ class Sequential:
         plt.ylabel('Benefit')
         plt.xlabel('Iteration number')
         plt.title("Operator's benefit as a function of the iteration number. \
-        \n The initial prices are: Operator 1: %r and Operator 2: %r" %(self.p_fixed[1], self.p_fixed[2]))
+        \n The initial prices are: %r" %(self.p_fixed))
         plt.legend()
         plt.savefig('benefit_history_%r.png' %(title))
         plt.close()
 
         ### Market share graph
         # Get the demand history for each operators
-        market_history_1 = [market[1] for market in self.market_share if market[1] != -1]
-        market_history_2 = [market[2] for market in self.market_share if market[2] != -1]
-        market_sum = [m1 + m2 for m1, m2 in zip(market_history_1, market_history_2)]
+        market_history = [[] for i in range(len(self.operator))]
+        nb_opt_out = self.operator.count(0)
+        for i in range(len(self.operator)):
+            market_history[i] = [market for market in self.market_share[:,i] if market != -1]
+        market_sum = []
+        for iter in range(len(market_history[0])):
+            market_sum.append(sum([market_history[i][iter] for i in range(nb_opt_out, len(self.operator))]))
+
         # Plot them
-        plt.plot(market_history_2, label='Operator 2 market share', color='blue')
-        plt.plot(market_history_1, label='Operator 1 market share', color='red')
+        color = {4: 'red', 5: 'lightcoral', 6: 'blue', 7: 'cornflowerblue'}
+        for i in range(len(self.operator)):
+            if self.operator[i] != 0:
+                plt.plot(market_history[i], label='Alternative ' + self.name_mapping[i] + ' market share', color=color[i])
         plt.plot(market_sum, '--' ,label='Market total', color='green')
         # Plot vertical line to indicate the beginning of the cycle
         if self.cycle_iter is not None:
@@ -196,7 +214,7 @@ class Sequential:
         plt.ylabel('Market share')
         plt.xlabel('Iteration number')
         plt.title("Operator's market share as a function of the iteration number. \
-        \n The initial prices are: Operator 1: %r and Operator 2: %r" %(self.p_fixed[1], self.p_fixed[2]))
+        \n The initial prices are: %r" %(self.p_fixed))
         plt.legend()
         plt.savefig('market_history_%r.png' %(title))
         plt.close()
@@ -229,11 +247,11 @@ if __name__ == '__main__':
 
     t_1 = time.time()
     sequential_dict = {'K': 2,
-                    'operator': [0, 1, 2],
+                    'operator': [0, 0, 0, 0, 1, 1, 2, 2],
                     'max_iter': 50,
-                    'optimizer': 1.0,
-                    'p_fixed': [0.0, -1.0, 0.5],
-                    'y_fixed': [1.0, 1.0, 1.0]}
+                    'optimizer': 1,
+                    'p_fixed': [stackelberg_dict['PRICE_CAR'], stackelberg_dict['PRICE_PLANE'], stackelberg_dict['PRICE_IC_1'], stackelberg_dict['PRICE_IC_2'], -1.0, -1.0, 76.5, 66.5],
+                    'y_fixed': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]}
     sequential_game = Sequential(**sequential_dict)
     # Update the dict with the attributes of the Stackelberg game
     sequential_dict.update(stackelberg_dict)
@@ -250,7 +268,7 @@ if __name__ == '__main__':
     print('Total number of iterations: %r' %nb_iter)
 
     print('n: %r and r: %r' %(sequential_dict['N'], sequential_dict['R']))
-    sequential_game.plotGraphs('test')
+    sequential_game.plotGraphs('cycle_new_cost')
     '''
     ### Non linear formulation
     t_0 = time.time()
