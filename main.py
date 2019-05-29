@@ -1,4 +1,5 @@
-# Python script containing several options to run the blocks of the algorithmic framework together.
+# Python script containing several methods connecting the different blocks
+# of the algorithmic framework
 
 # General
 import sys
@@ -19,9 +20,9 @@ import sequential_game
 import fixed_point
 import fixed_point_no_capacity
 # Data
-import Data.Non_linear_Stackelberg.ProbLogit_n10 as non_linear_data
-import Data.Stackelberg.MILPLogit_n10r100 as linear_data
-import Data.Fixed_Point.ProbLogit_n10 as fixed_point_data
+import Data.Italian.Non_linear_Stackelberg.ProbLogit_n40 as non_linear_data
+import Data.Italian.Stackelberg.MILPLogit_n20r50 as linear_data
+import Data.Italian.Fixed_Point.ProbLogit_n20r50 as fixed_point_data
 
 def heuristicIntensification(non_linear_data, heu_game_keywords, step, capacity=[60.0, 6.0, 6.0]):
     ''' 2-stage method. In the first stage, the heuristic game is called.
@@ -44,27 +45,32 @@ def heuristicIntensification(non_linear_data, heu_game_keywords, step, capacity=
         data['capacity'] = capacity
     # Preprocess the data
     non_linear_data.preprocess(data)
-    # Instanciate the heuristic game
-    heu_game = nash_heuristic.NashHeuristic(**heu_game_keywords)
     # Update the original data
     data.update(heu_game_keywords)
+    # Instanciate the heuristic game
+    heu_game = nash_heuristic.NashHeuristic(**data)
     #### Run the heuristic game
     heu_game.run(data)
     # Keep track of the bounds of the endogene variables for each alternative of each operator
-    lower_bound_candidate_solutions = [[] for k in range(data['K'])]
-    upper_bound_candidate_solutions = [[] for k in range(data['K'])]
+    lower_bound_candidate_solutions = {}
+    upper_bound_candidate_solutions = {}
+    for i in range(heu_game.I_opt_out, heu_game.I_opt_out + heu_game.I):
+        lower_bound_candidate_solutions[i] = []
+        upper_bound_candidate_solutions[i] = []
     # Search for the candidate Nash eq. and cycles found by the heuristic game
     for (k, table) in enumerate(heu_game.tables):
         # Map the current table with the strategy of the competitor
         for (p_range, value) in zip(heu_game.mapping[((k+1)%2) + 1], table):
             if value != np.inf:
                 # Candidate solution found
-                lower_bound_candidate_solutions[((k+1)%2)].append(list(p_range.values())[0][0])
-                upper_bound_candidate_solutions[((k+1)%2)].append(list(p_range.values())[0][1])
+                for i in p_range.keys():
+                    lower_bound_candidate_solutions[i].append(p_range[i][0])
+                    upper_bound_candidate_solutions[i].append(p_range[i][1])
     # Compute the lower/upper bound of the endogenous variable among all the candidate solution
     # These bound will be the ones used in the next run of the heuristic game
-    lb = [min(prices) for prices in lower_bound_candidate_solutions]
-    ub = [max(prices) for prices in upper_bound_candidate_solutions]
+    for i in range(heu_game.I_opt_out, heu_game.I_opt_out + heu_game.I):
+        lower_bound_candidate_solutions[i] = min(lower_bound_candidate_solutions[i])
+        upper_bound_candidate_solutions[i] = max(upper_bound_candidate_solutions[i])
 
     #### Re-run the heuristic game on the pruned region
     print('\nStage 2: 2nd Run the Heuristic game')
@@ -74,19 +80,20 @@ def heuristicIntensification(non_linear_data, heu_game_keywords, step, capacity=
         data.pop('capacity', None)
     else:
         data['capacity'] = capacity
-    # Adjust the price lb and ub
-    for i in range(1, data['I'] + 1):
-        data['lb_p'][i] = lb[i-1]
-        data['ub_p'][i] = ub[i-1]
-        heu_game_keywords['endo_var'][i]['p']['lb'] = lb[heu_game_keywords['operator'][i] - 1]
-        heu_game_keywords['endo_var'][i]['p']['ub'] = ub[heu_game_keywords['operator'][i] - 1]
+    # Adjust the price lb and ub, and the number of strategies per alternative
+    for i in range(heu_game.I_opt_out, heu_game.I_opt_out + heu_game.I):
+        data['lb_p'][i] = lower_bound_candidate_solutions[i]
+        data['ub_p'][i] = upper_bound_candidate_solutions[i]
+        heu_game_keywords['endo_var'][i]['p']['lb'] = lower_bound_candidate_solutions[i]
+        heu_game_keywords['endo_var'][i]['p']['ub'] = upper_bound_candidate_solutions[i]
+        heu_game_keywords['endo_var'][i]['p']['step'] = step
 
     # Preprocess the data
     non_linear_data.preprocess(data)
-    # Instanciate the heuristic game
-    heu_game = nash_heuristic.NashHeuristic(**heu_game_keywords)
     # Update the original data
     data.update(heu_game_keywords)
+    # Instanciate the heuristic game
+    heu_game = nash_heuristic.NashHeuristic(**data)
     # Run the game
     heu_game.run(data)
 
@@ -109,10 +116,10 @@ def heuristicToMILP(non_linear_data, linear_data, heu_game_keywords, capacity=[6
         data['capacity'] = capacity
     # Preprocess the data
     non_linear_data.preprocess(data)
-    # Instanciate the heuristic game
-    heu_game = nash_heuristic.NashHeuristic(**heu_game_keywords)
     # Update the original data
     data.update(heu_game_keywords)
+    # Instanciate the heuristic game
+    heu_game = nash_heuristic.NashHeuristic(**data)
     # Run the game
     heu_game.run(data)
     # Initialize the candidate Nash equilibrium solutions
@@ -122,10 +129,10 @@ def heuristicToMILP(non_linear_data, linear_data, heu_game_keywords, capacity=[6
         for (p_range, value) in zip(heu_game.mapping[((k+1)%2) + 1], heu_game.tables[k]):
             if value != np.inf:
                 # Candidate solution found
-                candidate_solutions.append(list(p_range.values())[0])
+                candidate_solutions.append(p_range)
                 print('\n Candidate solution n°%r: Price of operator %r: %r.'
-                       %(len(candidate_solutions), ((k+1)%2)+1, list(p_range.values())[0]))
-                # Update the table to not detect the same candidate solution twice
+                       %(len(candidate_solutions), ((k+1)%2)+1, p_range))
+                # Update the table to not detect the same candidate solution twice ?
                 for index in range(len(heu_game.tables)):
                     np.place(heu_game.tables[index], heu_game.tables[index]==value, np.inf)
 
@@ -137,20 +144,20 @@ def heuristicToMILP(non_linear_data, linear_data, heu_game_keywords, capacity=[6
                     data['capacity'] = capacity
                 linear_data.preprocess(data)
                 # Compute the starting price vector of the sequential game
-                random_price = random.uniform(list(p_range.values())[0][0],
-                                              list(p_range.values())[0][1])
-                if (k+1) == 1:
-                    p_fixed = [0.0, -1.0, random_price]
-                elif (k+1) == 2:
-                    p_fixed = [0.0, random_price, -1.0]
-                else:
-                    raise NotImplementedError('Method limited to two operators')
+                p_fixed = copy.deepcopy(data['lb_p'])
+                for i in range(self.I_opt_out, self.I + self.I_opt_out):
+                    if i in p_range.keys():
+                        p_fixed[i] = random.uniform(p_range[i][0],
+                                                    p_range[i][1])
+                    else:
+                        p_fixed[i] = -1.0
+
                 sequential_keywords = {'K': heu_game_keywords['K'],
                                        'operator': heu_game_keywords['operator'],
                                        'max_iter': 50,
                                        'optimizer': k+1,
                                        'p_fixed': p_fixed,
-                                       'y_fixed': [1.0, 1.0, 1.0]}
+                                       'y_fixed': np.full((data['I'] + data['I_opt_out']), 1.0)}
                 seq_game = sequential_game.Sequential(**sequential_keywords)
                 data.update(sequential_keywords)
                 # Run the MILP sequential game
@@ -170,12 +177,16 @@ def MILPtoFixedPoint(linear_data, fixed_point_data, seq_game_keywords, n_price_l
 
     '''
     print('\n--- MILP Sequential game to Fixed-point Iterative Method ---\n')
+    print('\nRun the MILP Sequential game')
     # Run the MILP sequential game
     data = linear_data.getData()
     if capacity is None:
         data.pop('capacity', None)
     else:
         data['capacity'] = capacity
+    # Construct the initial prices for the opt-out alternatives
+    for i in range(data['I_opt_out']):
+        seq_game_keywords['p_fixed'][i] = data['lb_p'][i]
     # Preprocess the data
     linear_data.preprocess(data)
     # Instanciate the sequential game
@@ -189,11 +200,13 @@ def MILPtoFixedPoint(linear_data, fixed_point_data, seq_game_keywords, n_price_l
     # in the cycle detected by the MILP seq. game
     lb = []
     ub = []
-    for i in range(data['I'] + 1):
+    for i in range(data['I'] + data['I_opt_out']):
         history = [p for p in seq_game.p_history[seq_game.cycle_iter:][:, i] if p != -1.0]
         lb.append(min(history))
         ub.append(max(history))
 
+    print('\nRun the Fixed-point Iterative Method')
+    t0 = time.time()
     # Get the fixed point data
     data = fixed_point_data.getData()
     # Update the fixed point data price
@@ -213,8 +226,11 @@ def MILPtoFixedPoint(linear_data, fixed_point_data, seq_game_keywords, n_price_l
         # Instanciate a Fixed point method game and solve it
         fixed_point_game = fixed_point.Fixed_Point(**data)
 
+    for i in range(data['I'] + data['I_opt_out']):
+        print('Strategy set of the alternative %r: %r' %(i, data['p'][i, :]))
     model = fixed_point_game.getModel()
     fixed_point_game.solveModel(model)
+    print('Running time of the Fixed-Point MIP: %r' %(time.time() -t0))
 
 def cyclesToFixedPoint(cycles, fixed_point_data, n_price_levels, capacity=[60.0, 6.0, 6.0]):
     ''' Given cycles, construct a corresponding strategy set for the fixed-point model.
@@ -271,7 +287,7 @@ def cyclesToFixedPoint(cycles, fixed_point_data, n_price_levels, capacity=[60.0,
                    # The price range of cycle index_1 and index_2 need to be merged
                    to_merge[i].append([index_1, index_2])
 
-    # Map the initial cycle index with the merged cycle index
+    # Map the indices of the cycles in cycles to the indices of the cycles in merged_cycles
     cycles_indices = [{} for i in range(data['I'])]
     for i in range(data['I']):
         for index in range(len(cycles[i])):
@@ -298,6 +314,7 @@ def cyclesToFixedPoint(cycles, fixed_point_data, n_price_levels, capacity=[60.0,
             cycles_indices[i][cycle_id_1] = map_index_0
             # Since map_index_1 is deleted, decrement the map_index of the
             # cycles having a map_index higher than map_index_1
+            # Note that map_index_0 is smaller than map_index_1
             for key in cycles_indices[i].keys():
                 if cycles_indices[i][key] > map_index_1:
                     cycles_indices[i][key] -= 1
@@ -334,8 +351,8 @@ def cyclesToFixedPoint(cycles, fixed_point_data, n_price_levels, capacity=[60.0,
             strategy_set.extend(list(np.linspace(cycle[0], cycle[1], num=nb_strat[index])))
         # Sort the strategy in increasing order
         strategy_set.sort()
-        # i+1 not to change opt-out prices
-        data['p'][i+1] = copy.deepcopy(strategy_set)
+        # i+I_opt_out not to change opt-out prices
+        data['p'][i + data['I_opt_out']] = copy.deepcopy(strategy_set)
     # The following commented lines is another method to compute the strategy set
     '''
     for i in range(data['I']):
@@ -361,7 +378,7 @@ def cyclesToFixedPoint(cycles, fixed_point_data, n_price_levels, capacity=[60.0,
         # Note that it is crucial to sort the strategy set for the preprocessing
         strategy_set.sort()
         # i+1 not to change opt-out prices
-        data['p'][i+1] = copy.deepcopy(strategy_set)
+        data['p'][i + data['I_opt_out']] = copy.deepcopy(strategy_set)
     '''
 
     print('\nStrategy sets: %r' %data['p'])
@@ -379,7 +396,7 @@ def cyclesToFixedPoint(cycles, fixed_point_data, n_price_levels, capacity=[60.0,
     model = fixed_point_game.getModel()
     fixed_point_game.solveModel(model)
 
-def fixedPointToStackelberg(linear_data, fixed_point_data, n_price_levels, price_tol, revenue_tol, capacity=[60.0, 6.0, 6.0]):
+def fixedPointToStackelberg(linear_data, fixed_point_data, n_price_levels, price_tol, revenue_tol, lb_p, ub_p, capacity=[60.0, 6.0, 6.0]):
     ''' Run the fixed point model. Then, Stackelberg games with the linear model are
         launched, starting from the 'previous prices' decision variables found by the fixed point model. The goal
         is to check whether the optimal solution found by the fixed point model is a good
@@ -391,6 +408,8 @@ def fixedPointToStackelberg(linear_data, fixed_point_data, n_price_levels, price
             n_price_levels    number of strategy per alternative in the fixed-point model [int]
             price_tol         price tolerance between the fixed point model and stackelberg game [float]
             revenue_tol       revenue difference between the fixed point model and stackelberg game [float]
+            lb_p              price lower bound for each alternative [list]
+            ub_p              price upper bound for each alternative [list]
             capacity          capacity of each alternative [list]
     '''
     print('\n--- Fixed Point Model to Stackelberg Game Method ---\n')
@@ -399,6 +418,9 @@ def fixedPointToStackelberg(linear_data, fixed_point_data, n_price_levels, price
     fp_data = fixed_point_data.getData()
     # Initial number of strategy per operator
     fp_data['n_price_levels'] = n_price_levels
+    # Set the price lower and upper bound
+    fp_data['lb_p'] = copy.deepcopy(lb_p)
+    fp_data['ub_p'] = copy.deepcopy(ub_p)
     # While the fixed point model is not accurate enough, add more strategies
     # and re-launch the fixed-point model
     accurate = False
@@ -423,60 +445,72 @@ def fixedPointToStackelberg(linear_data, fixed_point_data, n_price_levels, price
 
         #### Keep track of the decision variables of the fixed point model
         # Price
-        price_before = [0.0]
-        for i in range(1, fp_data['I'] + 1):
-            price_before.append(model.solution.get_values('price[' + str(i) + ']'))
+        price_before = []
+        for i in range(fp_data['I'] + fp_data['I_opt_out']):
+            if i < fp_data['I_opt_out']:
+                price_before.append(fp_data['lb_p'][i])
+            else:
+                price_before.append(model.solution.get_values('price[' + str(i) + ']'))
 
-        price_after_fixed_point = [0.0]
-        for i in range(1, fp_data['I'] + 1):
-            k = fp_data['operator'][i]
-            for l in range(n_price_levels):
-                # Check which strategy the current operator picked, get the corresponding alternative price
-                if model.solution.get_values('vAft[' + str(k) + ']' + '[' + str(l) + ']') == 1:
-                    price_after_fixed_point.append(fp_data['p'][i, l])
+        price_after_fixed_point = []
+        for i in range(fp_data['I'] + fp_data['I_opt_out']):
+            if i < fp_data['I_opt_out']:
+                price_after_fixed_point.append(price_before[i])
+            else:
+                k = fp_data['operator'][i]
+                for l in range(fp_data['n_price_levels']):
+                    # Check which strategy the current operator picked, get the corresponding alternative price
+                    if model.solution.get_values('vAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']') == 1:
+                        price_after_fixed_point.append(fp_data['p'][i, l])
         # Revenue
         revenue_after_fixed_point = [0.0]
         for k in range(1, fp_data['K'] + 1):
-            revenue_after_fixed_point.append(model.solution.get_values('linRevenueAft[' + str(k) + ']'))
+            revenue_after_fixed_point.append(model.solution.get_values('revenueAftMax[' + str(k) + ']'))
 
         #### Run the Stackelberg games
         print('\nRun the Stackelberg games')
         # Keep track of the decision variables
-        price_after_stackelberg = [0.0]
+        price_after_stackelberg = copy.deepcopy(price_before)
         revenue_after_stackelberg = [0.0 for k in range(fp_data['K'] + 1)]
         # Get the data and construct the keyword arguments for the stackelberg game
         l_data = linear_data.getData()
+        # Set the price lower and upper bound
+        l_data['lb_p'] = copy.deepcopy(lb_p)
+        l_data['ub_p'] = copy.deepcopy(ub_p)
+        # Add keyword arguments to fix the price of an operator
         l_data['operator'] = copy.deepcopy(fp_data['operator'])
-        l_data['y_fixed'] = [1.0, 1.0, 1.0]
-        # Launch a Stackelberg game for each alternative
-        for i in range(1, l_data['I'] + 1):
-            print('\nStackelberg game number %r' %i)
+        l_data['y_fixed'] = np.full((l_data['I'] + l_data['I_opt_out']), 1.0)
+        # Launch a Stackelberg game for each operator
+        for k in range(1, fp_data['K'] + 1):
+            print('\nStackelberg game number %r' %k)
+            l_data['optimizer'] = k
             # Fix the prices
-            l_data['optimizer'] = l_data['operator'][i]
-            if i == 1:
-                l_data['p_fixed'] = [0.0, -1.0, price_before[2]]
-            elif i == 2:
-                l_data['p_fixed'] = [0.0, price_before[1], -1.0]
-            else:
-                raise NotImplementedError('Method limited to two operators')
+            l_data['p_fixed'] = copy.deepcopy(l_data['lb_p'])
+            for i in range(l_data['I_opt_out'], (l_data['I'] + l_data['I_opt_out'])):
+                if l_data['operator'][k] == k:
+                    l_data['p_fixed'][i] = -1.0
+                else:
+                    l_data['p_fixed'][i] = price_before[i]
+
             # Prepross the data, initialize the Stackelberg game and solve it
             linear_data.preprocess(l_data)
             stack_game = stackelberg_game.Stackelberg(**l_data)
             model = stack_game.getModel()
             stack_game.solveModel(model)
-            # Keep track of the price obtained
-            price_after_stackelberg.append(model.solution.get_values('p[' + str(i) + ']'))
-            revenue_after_stackelberg[l_data['operator'][i]] = model.solution.get_objective_value()
+            # Keep track of the price and revenue obtained
+            for i in [i for i, ope in enumerate(l_data['operator']) if ope == k]:
+                price_after_stackelberg[i] = model.solution.get_values('p[' + str(i) + ']')
+            revenue_after_stackelberg[k] = model.solution.get_objective_value()
 
         print('\n-------------------------------------------\n')
         ### Print the prices
-        for i in range(l_data['I'] + 1):
+        for i in range(l_data['I'] + l_data['I_opt_out']):
             print('\nInitial price of alternative %r: %r' %(i, price_before[i]))
             print('After price of alternative %r (Fixed-point): %r' %(i, price_after_fixed_point[i]))
             print('After price of alternative %r (Stackelberg): %r' %(i, price_after_stackelberg[i]))
 
         ### Print the price difference between the fixed point and Stackelberg game
-        for i in range(l_data['I'] + 1):
+        for i in range(l_data['I'] + l_data['I_opt_out']):
             print('\nPrice difference of alternative %r (Fixed-point): %r' %(i, abs(price_before[i]-price_after_fixed_point[i])))
             print('Price difference of alternative %r (Stackelberg): %r' %(i, abs(price_before[i]-price_after_stackelberg[i])))
 
@@ -487,7 +521,7 @@ def fixedPointToStackelberg(linear_data, fixed_point_data, n_price_levels, price
 
         ### Check whether the price and revenue differences are small enough.
         # If at least one of them satify its tolerance threshold, the solution is considered accurate
-        price_diff = [abs(price_after_fixed_point[i] - price_after_stackelberg[i]) for i in range(l_data['I'] + 1)]
+        price_diff = [abs(price_after_fixed_point[i] - price_after_stackelberg[i]) for i in range(l_data['I'] + l_data['I_opt_out'])]
         revenue_diff = [abs(revenue_after_fixed_point[k] - revenue_after_stackelberg[k]) for k in range(fp_data['K'] + 1)]
         if all(entry < price_tol for entry in price_diff):
             accurate = True
@@ -501,31 +535,39 @@ def fixedPointToStackelberg(linear_data, fixed_point_data, n_price_levels, price
 
 if __name__ == '__main__':
     # Data for the heuristic game
+    nl_data = non_linear_data.getData()
     heu_keywords = {'K': 2,
-                    'I': 2,
-                    'operator': [0, 1, 2],
-                    'optimizer': 1,
-                    'endo_var': {0:{'p':{'domain': 'C', 'lb': 0.0, 'ub': 0.0, 'step':1}},
-                                1:{'p':{'domain': 'C', 'lb': 0.0, 'ub': 1.0, 'step':20}},
-                                2:{'p':{'domain': 'C', 'lb': 0.0, 'ub': 1.0, 'step':20}}},
-                    'seed': 1}
+                'operator': [0, 0, 0, 0, 1, 1, 2, 2],
+                'optimizer': 1,
+                'endo_var': {0:{'p':{'domain': 'C', 'lb': nl_data['lb_p'][0], 'ub': nl_data['ub_p'][0], 'step':1}},
+                             1:{'p':{'domain': 'C', 'lb': nl_data['lb_p'][1], 'ub': nl_data['ub_p'][1], 'step':1}},
+                             2:{'p':{'domain': 'C', 'lb': nl_data['lb_p'][2], 'ub': nl_data['ub_p'][2], 'step':1}},
+                             3:{'p':{'domain': 'C', 'lb': nl_data['lb_p'][3], 'ub': nl_data['ub_p'][3], 'step':1}},
+                             4:{'p':{'domain': 'C', 'lb': nl_data['lb_p'][4], 'ub': nl_data['ub_p'][4], 'step':10}},
+                             5:{'p':{'domain': 'C', 'lb': nl_data['lb_p'][5], 'ub': nl_data['ub_p'][5], 'step':10}},
+                             6:{'p':{'domain': 'C', 'lb': nl_data['lb_p'][6], 'ub': nl_data['ub_p'][6], 'step':10}},
+                             7:{'p':{'domain': 'C', 'lb': nl_data['lb_p'][7], 'ub': nl_data['ub_p'][7], 'step':10}}},
+                'seed': 1
+                }
     # Data for the sequential game
     seq_keywords = {'K': 2,
-                    'operator': [0, 1, 2],
+                    'operator': [0, 0, 0, 0, 1, 1, 2, 2],
                     'max_iter': 50,
                     'optimizer': 1,
-                    'p_fixed': [0.0, -1.0, 0.5],
-                    'y_fixed': [1.0, 1.0, 1.0]}
+                    'p_fixed': [-1, -1, -1, -1, -1, -1, 50.0, 50.0],
+                    'y_fixed': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]}
 
     # Run the heuristic intensification
-    heuristicIntensification(non_linear_data, heu_keywords, 20, capacity=None)
+    heuristicIntensification(non_linear_data, heu_keywords, 10, capacity=None)
+    '''
     # Run the heuristic towards MILP sequential method
     heuristicToMILP(non_linear_data, linear_data, heu_keywords, capacity=None)
-    # Run the MILP sequential method toward the fixed-point method
+    # Run the MILP sequential method toward the fixed-point model method
     MILPtoFixedPoint(linear_data, fixed_point_data, seq_keywords, 20, capacity=None)
-    # Run the cyles to Fixed point method
+    # Run the cyles to Fixed point model method
     cycles = [[[0.6, 0.7], [0.8, 0.9], [0.65, 0.85], [0.1, 0.2], [0.3, 0.4], [0.39, 0.45]],
               [[0.1, 0.2], [0.3, 0.4], [0.39, 0.45], [0.6, 0.7], [0.8, 0.9], [0.65, 0.85]]]
     cyclesToFixedPoint(cycles, fixed_point_data, 10, capacity=None)
     # Run the fixed point towards Stackelberg game method
-    fixedPointToStackelberg(linear_data, fixed_point_data, 10, 0.02, 0.02, capacity=None)
+    fixedPointToStackelberg(linear_data, fixed_point_data, 10, 0.02, 0.02, [0.0, 0.0, 0.0], [0.0, 1.0, 1.0], capacity=None)
+    '''
