@@ -61,19 +61,19 @@ def getData():
 
     # Costs
     #                                   CAR   PLANE  IC_1   IC_2   AV_1   AV_2   NTV_1  NTV_2
-    dict['fixed_cost'] =    np.array([00.00, 00.00, 00.00, 00.00, 150.0, 150.0, 125.0, 125.0]) # Initial cost for each alternative
-    dict['customer_cost'] = np.array([00.00, 00.00, 00.00, 00.00, 40.00, 20.00, 40.00, 20.00]) # Additional cost for each new customer
+    dict['fixed_cost'] =    np.array([00.00, 00.00, 00.00, 00.00, 150.0, 125.0, 150.0, 125.0]) # Initial cost for each alternative
+    dict['customer_cost'] = np.array([00.00, 00.00, 00.00, 00.00, 20.00, 10.00, 20.00, 10.00]) # Additional cost for each new customer
 
     # Lower and upper bound on prices
     #                                 CAR                PLANE                IC_1                IC_2        AV_1   AV_2   NTV_1  NTV_2
     dict['lb_p'] = np.array([dict['PRICE_CAR'], dict['PRICE_PLANE'], dict['PRICE_IC_1'], dict['PRICE_IC_2'], 00.00 ,00.00 ,00.00 ,00.00])
-    dict['ub_p'] = np.array([dict['PRICE_CAR'], dict['PRICE_PLANE'], dict['PRICE_IC_1'], dict['PRICE_IC_2'], 100.0 ,100.0 ,100.0 ,100.0])
+    dict['ub_p'] = np.array([dict['PRICE_CAR'], dict['PRICE_PLANE'], dict['PRICE_IC_1'], dict['PRICE_IC_2'], 200.0 ,200.0 ,200.0 ,200.0])
 
     # Choice set of the customers
     dict['choice_set'] = np.full((dict['I'] + dict['I_opt_out'], dict['N']), 1)
 
     # Mapping between alternatives index and their names
-    dict['name_mapping'] = {0: 'Car', 1: 'Plane', 2: 'IC_1st', 3: 'IC_2nd', 4: 'AV_1st', 5: 'AV_2nd', 6: 'NTV_1st', 7: 'NTV_2nd'}
+    dict['name_mapping'] = {0: 'Car', 1: 'Plane', 2: 'IC_1', 3: 'IC_2', 4: 'AV_1', 5: 'AV_2', 6: 'NTV_1', 7: 'NTV_2'}
     # Capacities
     #                              CAR   PLANE  IC_1   IC_2   AV_1   AV_2   NTV_1  NTV_2
     #dict['capacity'] = np.array([20.00, 20.00, 20.00, 20.00, 20.00 ,20.00 ,20.00 ,20.00]) # Availability for each alternative (opt-out always available)

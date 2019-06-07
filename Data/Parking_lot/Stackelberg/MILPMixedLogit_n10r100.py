@@ -20,13 +20,13 @@ def getData():
     dict['R'] = 100
 
     # Lower and upper bound on prices
-    dict['lb_p'] = np.array([0, 0.00, 0.00]) # lower bound (FSP, PSP, PUP)
-    dict['ub_p'] = np.array([0, 1.00, 1.00]) # upper bound (FSP, PSP, PUP)
+    dict['lb_p'] = np.array([0.00, 0.00, 0.00]) # lower bound (FSP, PSP, PUP)
+    dict['ub_p'] = np.array([0.00, 1.00, 1.00]) # upper bound (FSP, PSP, PUP)
 
     #dict['capacity'] = np.array([60.0, 6.0, 6.0]) # Availability for each alternative (opt-out always available)
 
-    dict['fixed_cost'] = [0.0, 0.0, 0.0] # Initial cost for each alternative
-    dict['customer_cost'] = [0.0, 0.5, 0.6] # Additional cost for each new customer
+    #dict['fixed_cost'] = [0.0, 0.0, 0.0] # Initial cost for each alternative
+    #dict['customer_cost'] = [0.0, 0.5, 0.6] # Additional cost for each new customer
 
     # Choice set of the customers
     #	 		           n1 n2 n3...

@@ -69,7 +69,7 @@ def getData():
 
     # Costs
     #                                   CAR   PLANE  IC_1   IC_2   AV_1   AV_2   NTV_1  NTV_2
-    dict['fixed_cost'] =    np.array([00.00, 00.00, 00.00, 00.00, 150.0, 150.0, 125.0, 125.0]) # Initial cost for each alternative
+    dict['fixed_cost'] =    np.array([00.00, 00.00, 00.00, 00.00, 150.0, 125.0, 150.0, 125.0]) # Initial cost for each alternative
     dict['customer_cost'] = np.array([00.00, 00.00, 00.00, 00.00, 20.00, 10.00, 20.00, 10.00]) # Additional cost for each new customer
 
     # Lower and upper bound on prices
