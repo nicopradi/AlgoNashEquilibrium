@@ -11,7 +11,7 @@ import ipopt
 # numpy
 import numpy as np
 # data
-import Data.Parking_lot.Non_linear_Stackelberg.ProbMixedLogit_n5r50 as data_file
+import Data.Parking_lot.Non_linear_Stackelberg.ProbLogit_n10 as data_file
 
 class Stackelberg(object):
     def __init__(self, **kwargs):
@@ -28,6 +28,7 @@ class Stackelberg(object):
                 p_fixed           Fixed price of the alternatives managed by other operators [list]
                 y_fixed           Fixed availability of the alternatives managed by other operators [list]
                 capacity          Capacity value for each alternative [list]
+                choice_set        Individual choice sets [list]
                 priority_list     Priority list for each alternative [list]
                 R_coef            Number of draws for the beta coefficient [int]
                 fixed_cost        Initial cost of an alternative [list]
@@ -45,6 +46,7 @@ class Stackelberg(object):
         self.p_fixed = kwargs.get('p_fixed', None)
         self.y_fixed = kwargs.get('y_fixed', None)
         self.capacity = kwargs.get('capacity', None)
+        self.choice_set = kwargs.get('choice_set', None)
         self.priority_list = kwargs.get('priority_list', None)
         # R_coef determines the DCM: Mixed logit or Logit
         self.R_coef = kwargs.get('R_coef', None)
@@ -196,21 +198,27 @@ class Stackelberg(object):
                 # Uncapacitated model
                 else:
                     if self.R_coef is None:
-                        numerator = float(np.exp(x[self.U[i, n]]))
-                        denominator = 0.0
-                        for j in range(len(self.w)):
-                            denominator += np.exp(x[self.U[j, n]])
-                        expression = x[self.w[i, n]] - numerator/denominator
-                    else:
-                        sum = 0
-                        for r in range(self.R_coef):
-                            numerator = float(np.exp(x[self.U[i, n, r]]))
+                        if self.choice_set[i, n] == 0:
+                            expression = x[self.w[i, n]]
+                        else:
+                            numerator = float(np.exp(x[self.U[i, n]]))
                             denominator = 0.0
                             for j in range(len(self.w)):
-                                denominator += (np.exp(x[self.U[j, n, r]]))
-                            sum += (numerator/denominator)
-                        sum = sum/self.R_coef
-                        expression = x[self.w[i, n]] - sum
+                                denominator += np.exp(x[self.U[j, n]])
+                            expression = x[self.w[i, n]] - numerator/denominator
+                    else:
+                        if self.choice_set[i, n] == 0:
+                            expression = x[self.w[i, n]]
+                        else:
+                            sum = 0
+                            for r in range(self.R_coef):
+                                numerator = float(np.exp(x[self.U[i, n, r]]))
+                                denominator = 0.0
+                                for j in range(len(self.w)):
+                                    denominator += (np.exp(x[self.U[j, n, r]]))
+                                sum += (numerator/denominator)
+                            sum = sum/self.R_coef
+                            expression = x[self.w[i, n]] - sum
 
                 constraints.append(expression)
 
@@ -244,11 +252,12 @@ class Stackelberg(object):
                 for n in range(len(self.y[0])):
                     expression = x[self.y[i, n]] * (1.0 - x[self.y[i, n]])
                     constraints.append(expression)
-            # opt-out is always an available option
+            # Alternative availability is subject to the choice-set
             for i in range(self.I_opt_out):
                 for n in range(self.N):
-                    expression = x[self.y[i, n]]
-                    constraints.append(expression)
+                    if self.choice_set[i, n] == 0:
+                        expression = x[self.y[i, n]]
+                        constraints.append(expression)
             # Capacity is not exceeded
             for i in range(self.I + self.I_opt_out):
                 sum = 0
@@ -256,10 +265,10 @@ class Stackelberg(object):
                     sum += x[self.w[i, n]]
                 expression = sum - self.capacity[i]
                 constraints.append(expression)
-            # Priority list, if y is 0 then the max capacity is reached
+            # Priority list, if y is 0 then the max capacity is reached, or the alternative is not available in the choice set
             for i in range(self.I + self.I_opt_out):
                 for n in range(self.N):
-                    expression = self.capacity[i]*(1.0 - x[self.y[i, n]])
+                    expression = self.choice_set[i, n]*self.capacity[i]*(1.0 - x[self.y[i, n]])
                     # Compute the number of customers with a higher priority which chose alternative i
                     sum = np.sum([x[self.w[i, m]] for m in range(self.N) if self.priority_list[i, m] < self.priority_list[i, n]])
                     expression += -sum
@@ -303,16 +312,22 @@ class Stackelberg(object):
                                 expression = 0.0
                             elif i == j:
                                 if self.capacity is None:
-                                    sum = np.sum([np.exp(x[self.U[k, m]]) for k in range(len(self.U))])
-                                    expression = -(np.exp(x[self.U[j, m]])*sum - np.exp(x[self.U[j, m]])**2)/(sum**2)
+                                    if self.choice_set[i, n] == 0:
+                                        expression = 0.0
+                                    else:
+                                        sum = np.sum([np.exp(x[self.U[k, m]]) for k in range(len(self.U))])
+                                        expression = -(np.exp(x[self.U[j, m]])*sum - np.exp(x[self.U[j, m]])**2)/(sum**2)
                                 else:
                                     sum = np.sum([np.exp(x[self.U[k, m]])*x[self.y[k, m]] for k in range(len(self.U))])
                                     expression = -(np.exp(x[self.U[j, m]])*x[self.y[j, m]]*sum - (np.exp(x[self.U[j, m]])*x[self.y[j, m]])**2)/(sum**2)
                             else:
                                 expression = 0.0
                                 if self.capacity is None:
-                                    sum = np.sum([np.exp(x[self.U[k, m]]) for k in range(len(self.U))])
-                                    expression = (np.exp(x[self.U[i, m]])*np.exp(x[self.U[j, m]]))/(sum*sum)
+                                    if self.choice_set[i, n] == 0:
+                                        expression = 0.0
+                                    else:
+                                        sum = np.sum([np.exp(x[self.U[k, m]]) for k in range(len(self.U))])
+                                        expression = (np.exp(x[self.U[i, m]])*np.exp(x[self.U[j, m]]))/(sum*sum)
                                 else:
                                     sum = np.sum([np.exp(x[self.U[k, m]])*x[self.y[k, m]] for k in range(len(self.U))])
                                     expression = (np.exp(x[self.U[i, m]])*np.exp(x[self.U[j, m]])*x[self.y[i, m]]*x[self.y[j, m]])/(sum**2)
@@ -327,9 +342,12 @@ class Stackelberg(object):
                                 elif i == j:
                                     expression = 0.0
                                     if self.capacity is None:
-                                        for s in range(len(self.U[j, m])):
-                                            sum = np.sum([np.exp(x[self.U[k, m, s]]) for k in range(len(self.U))])
-                                            expression += -(np.exp(x[self.U[j, m, s]])*sum - np.exp(x[self.U[j, m, s]])**2)/(sum**2)
+                                        if self.choice_set[i, n] == 0:
+                                            expression = 0.0
+                                        else:
+                                            for s in range(len(self.U[j, m])):
+                                                sum = np.sum([np.exp(x[self.U[k, m, s]]) for k in range(len(self.U))])
+                                                expression += -(np.exp(x[self.U[j, m, s]])*sum - np.exp(x[self.U[j, m, s]])**2)/(sum**2)
                                     else:
                                         for s in range(len(self.U[j, m])):
                                             sum = np.sum([np.exp(x[self.U[k, m, s]])*x[self.y[k, m]] for k in range(len(self.U))])
@@ -338,9 +356,12 @@ class Stackelberg(object):
                                 else:
                                     expression = 0.0
                                     if self.capacity is None:
-                                        for s in range(len(self.U[j, m])):
-                                            sum = np.sum([np.exp(x[self.U[k, m, s]]) for k in range(len(self.U))])
-                                            expression += (np.exp(x[self.U[i, m, s]])*np.exp(x[self.U[j, m, s]]))/(sum**2)
+                                        if self.choice_set[i, n] == 0:
+                                            expression = 0.0
+                                        else:
+                                            for s in range(len(self.U[j, m])):
+                                                sum = np.sum([np.exp(x[self.U[k, m, s]]) for k in range(len(self.U))])
+                                                expression += (np.exp(x[self.U[i, m, s]])*np.exp(x[self.U[j, m, s]]))/(sum**2)
                                     else:
                                         for s in range(len(self.U[j, m])):
                                             sum = np.sum([np.exp(x[self.U[k, m, s]])*x[self.y[k, m]] for k in range(len(self.U))])
@@ -508,34 +529,35 @@ class Stackelberg(object):
                                 jacobian.append(1.0 - 2*x[self.y[j, m]])
                             else:
                                 jacobian.append(0.0)
-            #### opt-out is always an available option
+            #### Alternative availability is subject to the choice-set
             for i in range(self.I_opt_out):
                 for n in range(self.N):
-                    # For each variable
-                    # Price variables
-                    for j in range(len(self.p)):
-                        jacobian.append(0.0)
-                    # Utility variables
-                    if self.R_coef is None:
-                        for j in range(len(self.U)):
-                            for m in range(len(self.U[j])):
-                                jacobian.append(0.0)
-                    else:
-                        for j in range(len(self.U)):
-                            for m in range(len(self.U[j])):
-                                for r in range(len(self.U[j, m])):
-                                    jacobian.append(0.0)
-                    # Choice variables
-                    for j in range(len(self.w)):
-                        for m in range(len(self.w[j])):
+                    if self.choice_set[i, n] == 0:
+                        # For each variable
+                        # Price variables
+                        for j in range(len(self.p)):
                             jacobian.append(0.0)
-                    # Availability variables
-                    for j in range(len(self.y)):
-                        for m in range(len(self.y[j])):
-                            if (j == i) and (n == m):
-                                jacobian.append(1.0)
-                            else:
+                        # Utility variables
+                        if self.R_coef is None:
+                            for j in range(len(self.U)):
+                                for m in range(len(self.U[j])):
+                                    jacobian.append(0.0)
+                        else:
+                            for j in range(len(self.U)):
+                                for m in range(len(self.U[j])):
+                                    for r in range(len(self.U[j, m])):
+                                        jacobian.append(0.0)
+                        # Choice variables
+                        for j in range(len(self.w)):
+                            for m in range(len(self.w[j])):
                                 jacobian.append(0.0)
+                        # Availability variables
+                        for j in range(len(self.y)):
+                            for m in range(len(self.y[j])):
+                                if (j == i) and (n == m):
+                                    jacobian.append(1.0)
+                                else:
+                                    jacobian.append(0.0)
             #### capacity is not exceeded
             for i in range(self.I + self.I_opt_out):
                 # For each variable
@@ -563,7 +585,7 @@ class Stackelberg(object):
                 for j in range(len(self.y)):
                     for m in range(len(self.y[j])):
                         jacobian.append(0.0)
-            #### Priority list, if y[i, n] is 0 then the max capacity of alternative i is reached
+            #### Priority list, if y is 0 then the max capacity is reached, or the alternative is not available in the choice set
             for i in range(self.I + self.I_opt_out):
                 for n in range(self.N):
                     # For each variable
@@ -591,7 +613,7 @@ class Stackelberg(object):
                     for j in range(len(self.y)):
                         for m in range(len(self.y[j])):
                             if (j == i) and (m == n):
-                                jacobian.append(-self.capacity[i])
+                                jacobian.append(-self.capacity[i]*self.choice_set[i, n])
                             else:
                                 jacobian.append(0.0)
             #### Priority list, if y[i, n] is 1 then there is free room for n to choose alternative i
@@ -712,11 +734,12 @@ def main(data, tol=1e-3):
             for n in range(data['N']):
                 cl.append(-tol)
                 cu.append(tol)
-        # opt-out is always an available option
+        # Alternative availability is subject to the choice-set
         for i in range(data['I_opt_out']):
             for n in range(data['N']):
-                cl.append(1.0 - tol)
-                cu.append(1.0 + tol)
+                if data['choice_set'][i, n] == 0:
+                    cl.append(0.0 - tol)
+                    cu.append(0.0 + tol)
         # Capacity is not exceeded
         for i in range(data['I'] + data['I_opt_out']):
             cl.append(-data['capacity'][i] - tol)
@@ -852,7 +875,10 @@ def getInitialPoint(data, previous_solution=None):
         y_index = np.empty([data['I'] + data['I_opt_out'], data['N']], dtype = int)
         for i in range(data['I'] + 1):
             for n in range(data['N']):
-                x0.append(1.0)
+                if data['choice_set'] == 0:
+                    x0.append(0.0)
+                else:
+                    x0.append(1.0)
                 y_index[i, n] = count
                 count += 1
 
@@ -885,7 +911,7 @@ def getInitialPoint(data, previous_solution=None):
                     occupancy += x0[w_index[i, n]]
                     if capa[i] >= 1.0:
                         capa[i] -= x0[w_index[i, n]]
-                        if x0[y_index[i, n]] == 0:
+                        if (x0[y_index[i, n]] == 0) and (data['choice_set'][i, n] == 1):
                             feasible = False
                             x0[y_index[i, n]] = 1.0
                     else:
@@ -902,7 +928,11 @@ def getInitialPoint(data, previous_solution=None):
         w_index = np.empty([data['I'] + data['I_opt_out'], data['N']], dtype = int)
         for i in range(data['I'] + data['I_opt_out']):
             for n in range(data['N']):
-                if 'R_coef' in data.keys():
+                if data['choice_set'][i, n] == 0:
+                    x0.append(0.0)
+                    w_index[i, n] = count
+                    count += 1
+                elif 'R_coef' in data.keys():
                     # Mixed Logit
                     sum = 0.0
                     for r in range(data['R_coef']):
@@ -963,5 +993,5 @@ if __name__ == '__main__':
     data_file.preprocess(data)
     # Solve the non linear model
     t0 = time.time()
-    main(data, tol)
+    main(data)
     print('Total running time: %r ' %(time.time() - t0))
