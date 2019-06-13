@@ -52,7 +52,7 @@ class Fixed_Point:
         self.ub_p = kwargs.get('ub_p', 1.0)
         self.n_price_levels = kwargs.get('n_price_levels', 60)
         self.capacity = kwargs.get('capacity')
-        self.choice_set = kwargs.get('choice_set')
+        self.choice_set = kwargs.get('choice_set', None)
         self.xi = kwargs.get('xi')
         self.M_rev = kwargs.get('M_rev')
         # Preprocessed
@@ -508,25 +508,27 @@ class Fixed_Point:
                                              senses = 'E',
                                              rhs = [1.0])
 
-        # Opt-out is always an available option
-        # BEFORE
-        for n in range(self.N):
-            for r in range(self.R):
-                indices = ['y_scen[' + str(0) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
-                coefs = [1.0]
-                model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                             senses = 'E',
-                                             rhs = [1.0])
-        # AFTER
-        for k in range(1, self.K + 1):
+        # Opt-out is always an available option (if available in the choice set)
+        # TODO: Remove this constraint ?
+        if np.count_nonzero(self.choice_set[:self.I_opt_out, :] == 1) == np.prod(self.choice_set[:self.I_opt_out, :].shape):
+            # BEFORE
             for n in range(self.N):
                 for r in range(self.R):
-                    for l in range(self.n_price_levels):
-                        indices = ['y_scenAft[' + str(k) + ']' + '[' + str(0) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']']
-                        coefs = [1.0]
-                        model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                                     senses = 'E',
-                                                     rhs = [1.0])
+                    indices = ['y_scen[' + str(0) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
+                    coefs = [1.0]
+                    model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                 senses = 'E',
+                                                 rhs = [1.0])
+            # AFTER
+            for k in range(1, self.K + 1):
+                for n in range(self.N):
+                    for r in range(self.R):
+                        for l in range(self.n_price_levels):
+                            indices = ['y_scenAft[' + str(k) + ']' + '[' + str(0) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']']
+                            coefs = [1.0]
+                            model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                         senses = 'E',
+                                                         rhs = [1.0])
 
         # Alternatives not available at operator level if not included in the customer's choice set
         # BEFORE
@@ -848,66 +850,62 @@ class Fixed_Point:
             Returns:
                 model          cplex model solved
         '''
-        #TODO: Add print solution
-        try:
-            print("--SOLUTION : --")
-            #model.set_results_stream(None)
-            model.set_warning_stream(None)
-            model.solve()
-            print(model.solution.get_objective_value())
-            for i in range(self.I  + self.I_opt_out):
-                print('Previous price of alt %r : %r' %(i, model.solution.get_values('price[' + str(i) + ']')))
-                print('Previous demand alt %r : %r' %(i, model.solution.get_values('demand[' + str(i) + ']')))
-            print()
-            # Print the strategy chosen by the operator
-            print()
-            for k in range(1, self.K + 1):
-                for i in self.reverse_operator[k]:
-                    for l in range(self.n_price_levels):
-                        if model.solution.get_values('vAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']') == 1.0:
-                            print('Operator %r has chosen the strategy %r for alternative %r with price = %r' %(k, l, i, self.p[np.where(self.operator == k), l][0][0]))
-                            print('The after revenue of operator %r = %r' %(k, model.solution.get_values('revenueAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']')))
-            print()
-            for k in range(1, self.K + 1):
-                for i in range(self.I + self.I_opt_out):
-                    for n in range(self.N):
-                        for r in range(self.R):
-                            for l in range(self.n_price_levels):
-                                print('After Discounted Utility (k = %r, i = %r, n = %r, r = %r, l = %r): %r' %(k, i, n ,r ,l ,
-                                       model.solution.get_values('zAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']')))
-
+        print("--SOLUTION : --")
+        #model.set_results_stream(None)
+        model.set_warning_stream(None)
+        model.solve()
+        print(model.solution.get_objective_value())
+        for i in range(self.I  + self.I_opt_out):
+            print('Previous price of alt %r : %r' %(i, model.solution.get_values('price[' + str(i) + ']')))
+            print('Previous demand alt %r : %r' %(i, model.solution.get_values('demand[' + str(i) + ']')))
+        print()
+        # Print the strategy chosen by the operator
+        print()
+        for k in range(1, self.K + 1):
+            for i in self.reverse_operator[k]:
+                for l in range(self.n_price_levels):
+                    if model.solution.get_values('vAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']') == 1.0:
+                        print('Operator %r has chosen the strategy %r for alternative %r with price = %r' %(k, l, i, self.p[np.where(self.operator == k), l][0][0]))
+                        print('The after revenue of operator %r = %r' %(k, model.solution.get_values('revenueAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']')))
+        print()
+        for k in range(1, self.K + 1):
             for i in range(self.I + self.I_opt_out):
                 for n in range(self.N):
                     for r in range(self.R):
-                        print('Previous Discounted Utility(i = %r, n = %r, r = %r): %r' %(i, n, r,
-                                model.solution.get_values('z[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']')))
+                        for l in range(self.n_price_levels):
+                            print('After Discounted Utility (k = %r, i = %r, n = %r, r = %r, l = %r): %r' %(k, i, n ,r ,l ,
+                                   model.solution.get_values('zAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']')))
 
-            for i in range(self.I + self.I_opt_out):
-                for n in range(self.N):
-                    for r in range(self.R):
-                        print('Previous Discounted Utility(i = %r, n = %r, r = %r): %r' %(i, n, r,
-                                model.solution.get_values('z[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']')))
-
-            for i in range(self.I + self.I_opt_out):
-                for n in range(self.N):
-                    for r in range(self.R):
-                        print('Previous choice(i = %r, n = %r, r = %r): %r' %(i, n, r,
-                                model.solution.get_values('w[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']')))
-
-            for i in range(self.I + self.I_opt_out):
-                if i >= self.I_opt_out:
-                    print('A Distance(i = %r): %r' %(i,
-                            model.solution.get_values('a[' + str(i) + ']')))
-                    print('B Distance(i = %r): %r' %(i,
-                            model.solution.get_values('b[' + str(i) + ']')))
-
+        for i in range(self.I + self.I_opt_out):
             for n in range(self.N):
                 for r in range(self.R):
-                    print('Umax (n = %r, r = %r): %r' %(n, r, model.solution.get_values('Umax[' + str(n) + ']' + '[' + str(r) + ']')))
+                    print('Previous Discounted Utility(i = %r, n = %r, r = %r): %r' %(i, n, r,
+                            model.solution.get_values('z[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']')))
 
-            return model
-        except CplexSolverError as e:
-            print('Exception raised during dual of restricted problem')
+        for i in range(self.I + self.I_opt_out):
+            for n in range(self.N):
+                for r in range(self.R):
+                    print('Previous Discounted Utility(i = %r, n = %r, r = %r): %r' %(i, n, r,
+                            model.solution.get_values('z[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']')))
+
+        for i in range(self.I + self.I_opt_out):
+            for n in range(self.N):
+                for r in range(self.R):
+                    print('Previous choice(i = %r, n = %r, r = %r): %r' %(i, n, r,
+                            model.solution.get_values('w[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']')))
+
+        for i in range(self.I + self.I_opt_out):
+            if i >= self.I_opt_out:
+                print('A Distance(i = %r): %r' %(i,
+                        model.solution.get_values('a[' + str(i) + ']')))
+                print('B Distance(i = %r): %r' %(i,
+                        model.solution.get_values('b[' + str(i) + ']')))
+
+        for n in range(self.N):
+            for r in range(self.R):
+                print('Umax (n = %r, r = %r): %r' %(n, r, model.solution.get_values('Umax[' + str(n) + ']' + '[' + str(r) + ']')))
+
+        return model
 
 if __name__ == '__main__':
     t_0 = time.time()

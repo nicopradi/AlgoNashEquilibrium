@@ -19,27 +19,28 @@ class Fixed_Point:
             KeywordArgs:
                 I               Number of alternatives (without opt-out) [int]
                 I_opt_out       Number of opt-out alternatives [int]
-                N               Number of customers
-                R               Number of draws
-                K               Number of operators
-                operator        Mapping between alternative and operators
-                lb_p            Lower bound on price for each alternatives
-                ub_p            Upper bound on price for each alternatives
-                n_price_levels  Number of strategy for each operator
-                xi              Error term values
-                M_rev           Big M value for the revenue
+                N               Number of customers [int]
+                R               Number of draws [int]
+                K               Number of operators [int]
+                operator        Mapping between alternative and operators [list]
+                lb_p            Lower bound on price for each alternatives [list]
+                ub_p            Upper bound on price for each alternatives [list]
+                n_price_levels  Number of strategy for each operator [int]
+                choice_set      Individual choice sets [list]
+                xi              Error term values [list]
+                M_rev           Big M value for the revenue [int]
                 # Preprocessed
-                p               Set of possible prices for each alternative
-                lb_U            Lower bound on utility for each alternative and customer
-                ub_U            Upper bound on utility for each alternative and customer
-                lb_Umin         Lower bound on utility for each customer
-                ub_Umax         Upper bound on utility for each customer
-                M_U             Big M value for each customer for the utility
-                exo_utility     Value of the utility for the exogene variables
-                endo_coef       Beta coefficient of the endogene variables
-                wAft_precomputed wAft value when is was possible to precompute it
-                fixed_cost      Initial cost of an alternative
-                customer_cost   Additional cost of an alternative for each addition customer
+                p               Set of possible prices for each alternative [list]
+                lb_U            Lower bound on utility for each alternative and customer [list]
+                ub_U            Upper bound on utility for each alternative and customer [list]
+                lb_Umin         Lower bound on utility for each customer [list]
+                ub_Umax         Upper bound on utility for each customer [list]
+                M_U             Big M value for each customer for the utility [list]
+                exo_utility     Value of the utility for the exogene variables [list]
+                endo_coef       Beta coefficient of the endogene variables [list]
+                wAft_precomputed wAft value when is was possible to precompute it [list]
+                fixed_cost      Initial cost of an alternative [list]
+                customer_cost   Additional cost of an alternative for each addition customer [list]
 
         '''
         ## TODO: Check correctness of the attributes value
@@ -52,6 +53,7 @@ class Fixed_Point:
         self.lb_p = kwargs.get('lb_p', 1.0)
         self.ub_p = kwargs.get('ub_p', 1.0)
         self.n_price_levels = kwargs.get('n_price_levels', 60)
+        self.choice_set = kwargs.get('choice_set', None)
         self.xi = kwargs.get('xi')
         self.M_rev = kwargs.get('M_rev')
         # Preprocessed
@@ -202,7 +204,7 @@ class Fixed_Point:
                                 names = ['demand[' + str(i) + ']'])
 
         # Demand after
-        #TODO : k dimension unnecessary ?
+        #TODO : k dimension unnecessary
         for k in range(1, self.K + 1):
             for i in range(self.I + self.I_opt_out):
                 for l in range(self.n_price_levels):
@@ -369,7 +371,33 @@ class Fixed_Point:
 
         ### LEVEL 2 : CUSTOMER UTILITY MAXIMIZATION
         ## Choice-availability constraints
-        print('Pick exactely one alternative')
+        print('Customer do not choose an alternative which is not in his choice set')
+        # Customers choose an option in their choice set
+        # BEFORE
+        for i in range(self.I + self.I_opt_out):
+            for n in range(self.N):
+                if self.choice_set[i, n] == 0:
+                    for r in range(self.R):
+                        indices = ['w[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
+                        coefs = [1.0]
+                        model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                     senses = 'E',
+                                                     rhs = [0.0])
+
+        # AFTER
+        for k in range(1, self.K + 1):
+            for i in range(self.I + self.I_opt_out):
+                for n in range(self.N):
+                    if self.choice_set[i, n] == 0:
+                        for r in range(self.R):
+                            for l in range(self.n_price_levels):
+                                indices = ['wAft[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']']
+                                coefs = [1.0]
+                                model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                             senses = 'E',
+                                                             rhs = [0.0])
+
+        print('Customers pick exactly one alternative')
         # All customers choose one option
         # BEFORE
         for n in range(self.N):
@@ -388,7 +416,6 @@ class Fixed_Point:
                 for l in range(self.n_price_levels):
                     # If the preprocessing worked :
                     # Replace the 4 'Final configuration' constraints by the following one
-                    #TODO: Review the preprocessing
                     if (self.wAft_precomputed is not None) and (self.wAft_precomputed[k, 0, n ,r, l] is not None):
                         for i in range(self.I + self.I_opt_out):
                             indices = ['wAft[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']' + '[' + str(l) + ']']
@@ -524,51 +551,46 @@ class Fixed_Point:
             Returns:
                 model          cplex model solved
         '''
-        #TODO: Add print solution
-        try:
-            print("--SOLUTION : --")
-            #model.set_results_stream(None)
-            model.set_warning_stream(None)
-            model.solve()
-            print('Objective function: %r '%(model.solution.get_objective_value()))
-            # Print the previous price
-            print()
-            for i in range(self.I  + self.I_opt_out):
-                print('Previous price of alt %r : %r' %(i, model.solution.get_values('price[' + str(i) + ']')))
-                print('Previous demand alt %r : %r' %(i, model.solution.get_values('demand[' + str(i) + ']')))
-            # Print the strategy chosen by the operator
-            print()
-            for k in range(1, self.K + 1):
-                for i in self.reverse_operator[k]:
-                    for l in range(self.n_price_levels):
-                        if model.solution.get_values('vAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']') == 1.0:
-                            print('Operator %r has chosen the strategy %r for alternative %r with price = %r' %(k, l, i, self.p[np.where(self.operator == k), l][0][0]))
-                            print('The after revenue of operator %r = %r' %(k, model.solution.get_values('revenueAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']')))
-            # Print the demand
-            print()
-            for i in range(self.I_opt_out, self.I  + self.I_opt_out):
-                k = self.operator[i]
+
+        print("-- SOLUTION : --")
+        #model.set_results_stream(None)
+        model.set_warning_stream(None)
+        model.solve()
+        print('Objective function: %r '%(model.solution.get_objective_value()))
+        # Print the previous price
+        print()
+        for i in range(self.I  + self.I_opt_out):
+            print('Previous price of alt %r : %r' %(i, model.solution.get_values('price[' + str(i) + ']')))
+            print('Previous demand alt %r : %r' %(i, model.solution.get_values('demand[' + str(i) + ']')))
+        # Print the strategy chosen by the operator
+        print()
+        for k in range(1, self.K + 1):
+            for i in self.reverse_operator[k]:
                 for l in range(self.n_price_levels):
                     if model.solution.get_values('vAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']') == 1.0:
-                        print('The after demand for the alternative %r = %r ' %(i, model.solution.get_values('demandAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']')))
-            print()
-            # Print the after revenue
-            for k in range(1, self.K + 1):
-                print('The after revenue of operator %r is: %r' %(k, model.solution.get_values('revenueAftMax[' + str(k) + ']')))
-            print()
-            # Print the distance auxiliary variables
-            for i in range(self.I + self.I_opt_out):
-                if i >= self.I_opt_out:
-                    print('A Distance(i = %r): %r' %(i,
-                            model.solution.get_values('a[' + str(i) + ']')))
-                    print('B Distance(i = %r): %r' %(i,
-                            model.solution.get_values('b[' + str(i) + ']')))
+                        print('Operator %r has chosen the strategy %r for alternative %r with price = %r' %(k, l, i, self.p[i, l]))
+                        print('The after revenue of operator %r coming from alternative %r = %r ' %(k, i, model.solution.get_values('revenueAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']')))
+        # Print the demand
+        print()
+        for i in range(self.I_opt_out, self.I  + self.I_opt_out):
+            k = self.operator[i]
+            for l in range(self.n_price_levels):
+                if model.solution.get_values('vAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']') == 1.0:
+                    print('The after demand for the alternative %r = %r ' %(i, model.solution.get_values('demandAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']')))
+        print()
+        # Print the after revenue
+        for k in range(1, self.K + 1):
+            print('The after revenue of operator %r is: %r' %(k, model.solution.get_values('revenueAftMax[' + str(k) + ']')))
+        print()
+        # Print the distance auxiliary variables
+        for i in range(self.I + self.I_opt_out):
+            if i >= self.I_opt_out:
+                print('A Distance(i = %r): %r' %(i,
+                        model.solution.get_values('a[' + str(i) + ']')))
+                print('B Distance(i = %r): %r' %(i,
+                        model.solution.get_values('b[' + str(i) + ']')))
 
-            return model
-        except CplexSolverError as e:
-            print('Exception raised during dual of restricted problem')
-            import IPython
-            IPython.embed()
+        return model
 
 if __name__ == '__main__':
     t_0 = time.time()

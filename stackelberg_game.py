@@ -40,7 +40,6 @@ class Stackelberg:
                 customer_cost   Additional cost of an alternative for each addition customer [list]
 
         '''
-        ## TODO: Check correctness of the attributes value ?
         # Keyword arguments
         self.I = kwargs.get('I', 2)
         self.I_opt_out = kwargs.get('I_opt_out', 1)
@@ -217,15 +216,17 @@ class Stackelberg:
                                                  senses = 'L',
                                                  rhs = [0.0])
 
-        # Opt out is always available at scenario level
-        for n in range(self.N):
-            for r in range(self.R):
-                for i in range(self.I_opt_out):
-                    indices = ['y_scen[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
-                    coefs = [1.0]
-                    model.linear_constraints.add(lin_expr = [[indices, coefs]],
-                                                 senses = 'E',
-                                                 rhs = [1.0])
+        # Opt out is always available at scenario level (if available in the choice set)
+        # TODO: Remove this constraint ?
+        if np.count_nonzero(self.choice_set[:self.I_opt_out, :] == 1) == np.prod(self.choice_set[:self.I_opt_out, :].shape):
+            for n in range(self.N):
+                for r in range(self.R):
+                    for i in range(self.I_opt_out):
+                        indices = ['y_scen[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']']
+                        coefs = [1.0]
+                        model.linear_constraints.add(lin_expr = [[indices, coefs]],
+                                                     senses = 'E',
+                                                     rhs = [1.0])
 
         # Alternative not available at scenerio level if not included in the choice_set
         if self.choice_set is not None:

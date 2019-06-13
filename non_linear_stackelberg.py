@@ -172,7 +172,7 @@ class Stackelberg(object):
         for i in range(len(self.w)):
             for n in range(len(self.w[i])):
                 expression = 0.0
-                # Uncapacitated model
+                # Capacitated model
                 if self.capacity is not None:
                     # Check if the DCM is the Logit or Mixed logit model
                     if self.R_coef is None:
@@ -193,7 +193,7 @@ class Stackelberg(object):
                             sum += (numerator/denominator)
                         sum = sum/self.R_coef
                         expression = x[self.w[i, n]] - sum
-                # Capacitated model
+                # Uncapacitated model
                 else:
                     if self.R_coef is None:
                         numerator = float(np.exp(x[self.U[i, n]]))
@@ -837,7 +837,7 @@ def getInitialPoint(data, previous_solution=None):
                 u_index[i, n] = count
                 count += 1
 
-    # Choice variables and Availability variables
+    # Choice variables and availability variables
     # TODO: Explain how they are computed
     if 'capacity' in data.keys():
         # Capacitated model
