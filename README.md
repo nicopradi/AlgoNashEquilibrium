@@ -60,6 +60,7 @@ Please contact the author or the contributors for details on our code of conduct
 
 ### Contributors
 
+* [**Nicolas Pradignac**](https://www.linkedin.com/in/nicolas-pradignac-b13298159/)
 * [**Stefano Bortolomiol**](https://www.epfl.ch/labs/transp-or/people/)
 * [**Nikola Obrenovic**](https://www.epfl.ch/labs/transp-or/people/)
 * [**Theophile Thiery**](https://www.epfl.ch/labs/transp-or/people/)
