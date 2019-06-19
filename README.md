@@ -55,7 +55,7 @@ Please contact the author or the contributors for details on our code of conduct
 
 ## Authors
 
-* **[Nicolas Pradignac]** (https://www.linkedin.com/in/nicolas-pradignac-b13298159/)
+* [**Nicolas Pradignac**](https://www.linkedin.com/in/nicolas-pradignac-b13298159/)
   * *Email:* nicolas.pradignac.epfl@gmail.com
 
 ### Contributors
