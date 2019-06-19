@@ -21,15 +21,15 @@ Algorithmic framework developed within the scope of a Master's project.
 The main folder contains the different blocks of the algorithmic framework
 
 * **Stackelberg games**
-  * *Non-linear formulation:* [non_linear_stackelberg.py] (https://github.com/nicopradi/Master_Project/blob/master/non_linear_stackelberg.py)
-  * *Linear formulation:* [stackelberg_game.py] (https://github.com/nicopradi/Master_Project/blob/master/stackelberg_game.py)
-* **Nash Heuristic Algorithmic:** [nash_heuristic.py] (https://github.com/nicopradi/Master_Project/blob/master/nash_heuristic.py)
-* **Sequential game:** [sequential_game.py] (https://github.com/nicopradi/Master_Project/blob/master/sequential_game.py)
+  * *Non-linear formulation:* [non_linear_stackelberg.py](https://github.com/nicopradi/Master_Project/blob/master/non_linear_stackelberg.py)
+  * *Linear formulation:* [stackelberg_game.py](https://github.com/nicopradi/Master_Project/blob/master/stackelberg_game.py)
+* **Nash Heuristic Algorithmic:** [nash_heuristic.py](https://github.com/nicopradi/Master_Project/blob/master/nash_heuristic.py)
+* **Sequential game:** [sequential_game.py](https://github.com/nicopradi/Master_Project/blob/master/sequential_game.py)
 * **Fixed-point MILP model**
-  * *Capacitated formulation:* [fixed_point.py] (https://github.com/nicopradi/Master_Project/blob/master/fixed_point.py)
-  * *Uncapacitated formulation:* [fixed_point_no_capacity.py] (https://github.com/nicopradi/Master_Project/blob/master/fixed_point_no_capacity.py)
-  * *Discretized previous prices:* [fixed_point_discretized_strat.py] (https://github.com/nicopradi/Master_Project/blob/master/fixed_point_discretized_strat.py)
-* **Methods combining different blocks:** [main.py] (https://github.com/nicopradi/Master_Project/blob/master/main.py)
+  * *Capacitated formulation:* [fixed_point.py](https://github.com/nicopradi/Master_Project/blob/master/fixed_point.py)
+  * *Uncapacitated formulation:* [fixed_point_no_capacity.py](https://github.com/nicopradi/Master_Project/blob/master/fixed_point_no_capacity.py)
+  * *Discretized previous prices:* [fixed_point_discretized_strat.py](https://github.com/nicopradi/Master_Project/blob/master/fixed_point_discretized_strat.py)
+* **Methods combining different blocks:** [main.py](https://github.com/nicopradi/Master_Project/blob/master/main.py)
 
 The data folder contains the instances used by the different blocks.
 It contains two datasets: Parking choice instances and Italian railway instances.
@@ -60,6 +60,6 @@ Please contact the author or the contributors for details on our code of conduct
 
 ### Contributors
 
-* [**Stefano Bortolomiol**] (https://www.epfl.ch/labs/transp-or/people/)
-* [**Nikola Obrenovic**] (https://www.epfl.ch/labs/transp-or/people/)
-* [**Theophile Thiery**] (https://www.epfl.ch/labs/transp-or/people/)
+* [**Stefano Bortolomiol**](https://www.epfl.ch/labs/transp-or/people/)
+* [**Nikola Obrenovic**](https://www.epfl.ch/labs/transp-or/people/)
+* [**Theophile Thiery**](https://www.epfl.ch/labs/transp-or/people/)
