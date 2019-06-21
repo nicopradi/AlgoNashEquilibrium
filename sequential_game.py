@@ -13,7 +13,7 @@ from cplex.exceptions import CplexSolverError
 # numpy
 import numpy as np
 # data
-import Data.Italian.Stackelberg.MILPLogit_n40r50 as data_file
+import Data.Parking_lot.Stackelberg.MILPLogit_n10r100 as data_file
 import Data.Parking_lot.Non_linear_Stackelberg.ProbMixedLogit_n10r50 as data_file_2
 # Stackelberg
 import stackelberg_game
@@ -152,44 +152,23 @@ class Sequential:
         for i in range(len(self.operator)):
             p_history[i] = [prices for prices in self.p_history[:,i] if prices != -1]
         # Plot them
-        color = {4: 'red', 5: 'lightcoral', 6: 'blue', 7: 'cornflowerblue'}
+        color = {4: '0', 5: '0', 6: '0.7', 7: '0.7'}
+        linestyle = {4: '-', 5: '--', 6: '-', 7: '--'}
+        #color = {1: '0', 2: '0.7'}
+        #linestyle = {1: '-', 2: '-'}
         for i in range(len(self.operator)):
             if self.operator[i] != 0:
-                plt.plot(p_history[i], label='Alternative ' + self.name_mapping[i] + ' price', color=color[i])
+                plt.plot(p_history[i], label=self.name_mapping[i] + ' price',
+                         color=color[i], linestyle=linestyle[i], marker='x')
         # Plot vertical line to indicate the beginning of the cycle
         if self.cycle_iter is not None:
-            plt.axvline(x=self.cycle_iter, linestyle=':', color='black')
+            plt.axvline(x=self.cycle_iter, linestyle=':', color='black', linewidth=0.5)
         plt.ylabel('Price')
         plt.xlabel('Iteration number')
-        plt.title("Alternatives' price as a function of the iteration number. \
-        \n The initial prices are: %r" %(self.p_fixed))
-        plt.legend()
+        #plt.title("Alternatives' price as a function of the iteration number. \
+        #\n The initial prices are: %r" %(self.p_fixed))
+        plt.legend(loc='upper left')
         plt.savefig('price_history_%r.png' %(title))
-        plt.close()
-
-        ### Benefit graph
-        # Get the benefit history for each operators
-        benefit_history = [[] for k in range(self.K + 1)]
-        for k in range(self.K + 1):
-            benefit_history[k] = [benefits for benefits in self.benefit[:, k] if benefits != -1]
-        benefit_sum = []
-        for iter in range(len(benefit_history[0])):
-            benefit_sum.append(sum([benefit_history[k][iter] for k in range(1, self.K + 1)]))
-
-        # Plot them
-        color = {1: 'red', 2: 'blue'}
-        for k in range(1, self.K + 1):
-            plt.plot(benefit_history[k], label='Operator ' + str(k) + ' benefit', color=color[k])
-        plt.plot(benefit_sum, '--' ,label='Benefit total', color='green')
-        # Plot vertical line to indicate the beginning of the cycle
-        if self.cycle_iter is not None:
-            plt.axvline(x=self.cycle_iter, linestyle=':', color='black')
-        plt.ylabel('Benefit')
-        plt.xlabel('Iteration number')
-        plt.title("Operator's benefit as a function of the iteration number. \
-        \n The initial prices are: %r" %(self.p_fixed))
-        plt.legend()
-        plt.savefig('benefit_history_%r.png' %(title))
         plt.close()
 
         ### Market share graph
@@ -203,20 +182,52 @@ class Sequential:
             market_sum.append(sum([market_history[i][iter] for i in range(nb_opt_out, len(self.operator))]))
 
         # Plot them
-        color = {4: 'red', 5: 'lightcoral', 6: 'blue', 7: 'cornflowerblue'}
         for i in range(len(self.operator)):
             if self.operator[i] != 0:
-                plt.plot(market_history[i], label='Alternative ' + self.name_mapping[i] + ' market share', color=color[i])
-        plt.plot(market_sum, '--' ,label='Market total', color='green')
+                plt.plot(market_history[i], label=self.name_mapping[i] + ' market share',
+                         color=color[i], linestyle=linestyle[i], marker='x')
+        plt.plot(market_sum, ':' ,label='Market total', color='black')
         # Plot vertical line to indicate the beginning of the cycle
         if self.cycle_iter is not None:
-            plt.axvline(x=self.cycle_iter, linestyle=':', color='black')
+            plt.axvline(x=self.cycle_iter, linestyle=':', color='black', linewidth=0.5)
         plt.ylabel('Market share')
         plt.xlabel('Iteration number')
-        plt.title("Operator's market share as a function of the iteration number. \
-        \n The initial prices are: %r" %(self.p_fixed))
-        plt.legend()
+        #plt.title("Operator's market share as a function of the iteration number. \
+        #\n The initial prices are: %r" %(self.p_fixed))
+        plt.legend(loc='upper left')
         plt.savefig('market_history_%r.png' %(title))
+        plt.close()
+
+        ### Benefit graph
+        # Get the benefit history for each operators
+        benefit_history = [[] for k in range(self.K + 1)]
+        for k in range(self.K + 1):
+            benefit_history[k] = [benefits for benefits in self.benefit[:, k] if benefits != -1]
+        benefit_sum = []
+        for iter in range(len(benefit_history[0])):
+            benefit_sum.append(sum([benefit_history[k][iter] for k in range(1, self.K + 1)]))
+
+        # Plot them
+        color = {1: '0', 2: '0.7'}
+        for k in range(1, self.K + 1):
+            if k == 1:
+                operator = 'AV'
+                #operator = '1'
+            else:
+                operator = 'NTV'
+                #operator = '2'
+            plt.plot(benefit_history[k], label=operator + ' benefit',
+                    color=color[k], marker='x')
+        plt.plot(benefit_sum, ':' ,label='Benefit total', color='black')
+        # Plot vertical line to indicate the beginning of the cycle
+        if self.cycle_iter is not None:
+            plt.axvline(x=self.cycle_iter, linestyle=':', color='black', linewidth=0.5)
+        plt.ylabel('Benefit')
+        plt.xlabel('Iteration number')
+        #plt.title("Operator's benefit as a function of the iteration number. \
+        #\n The initial prices are: %r" %(self.p_fixed))
+        plt.legend(loc='upper left')
+        plt.savefig('benefit_history_%r.png' %(title))
         plt.close()
 
         # The following commented plot is not relevant
@@ -234,24 +245,34 @@ class Sequential:
         plt.ylabel('Demand curve')
         plt.xlabel('Price')
         plt.title('Demand of the alternative as a function of their price.\n')
-        plt.legend()
+        plt.legend(loc='upper left')
         plt.savefig('demand_%r.png' %(title))
         plt.close()
         '''
 
 if __name__ == '__main__':
+
     ### Linear formulation
     t_0 = time.time()
     stackelberg_dict = data_file.getData()
     data_file.preprocess(stackelberg_dict)
 
     t_1 = time.time()
+
+    sequential_dict = {'K': 2,
+                    'operator': [0, 1, 2],
+                    'max_iter': 50,
+                    'optimizer': 1.0,
+                    'p_fixed': [0.0, -1.0, 0.5],
+                    'y_fixed': [1.0, 1.0, 1.0]}
+    '''
     sequential_dict = {'K': 2,
                     'operator': [0, 0, 0, 0, 1, 1, 2, 2],
                     'max_iter': 50,
-                    'optimizer': 1,
-                    'p_fixed': [stackelberg_dict['PRICE_CAR'], stackelberg_dict['PRICE_PLANE'], stackelberg_dict['PRICE_IC_1'], stackelberg_dict['PRICE_IC_2'], -1.0, -1.0, 76.5, 66.5],
+                    'optimizer': 1.0,
+                    'p_fixed': [stackelberg_dict['PRICE_CAR'], stackelberg_dict['PRICE_PLANE'], stackelberg_dict['PRICE_IC_1'], stackelberg_dict['PRICE_IC_2'], -1.0, -1.0, 70.0, 70.0],
                     'y_fixed': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]}
+    '''
     sequential_game = Sequential(**sequential_dict)
     # Update the dict with the attributes of the Stackelberg game
     sequential_dict.update(stackelberg_dict)
@@ -268,7 +289,7 @@ if __name__ == '__main__':
     print('Total number of iterations: %r' %nb_iter)
 
     print('n: %r and r: %r' %(sequential_dict['N'], sequential_dict['R']))
-    sequential_game.plotGraphs('cycle_new_cost')
+    #sequential_game.plotGraphs('new_fixed_cost')
     '''
     ### Non linear formulation
     t_0 = time.time()

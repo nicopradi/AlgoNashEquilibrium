@@ -21,8 +21,8 @@ import fixed_point
 import fixed_point_no_capacity
 # Data
 import Data.Italian.Non_linear_Stackelberg.ProbLogit_n40 as non_linear_data
-import Data.Italian.Stackelberg.MILPLogit_n20r50 as linear_data
-import Data.Italian.Fixed_Point.ProbLogit_n20r50 as fixed_point_data
+import Data.Italian.Stackelberg.MILPLogit_n40r50 as linear_data
+import Data.Italian.Fixed_Point.ProbLogit_n40r50 as fixed_point_data
 
 def heuristicIntensification(non_linear_data, heu_game_keywords, step, capacity=[60.0, 6.0, 6.0]):
     ''' 2-stage method. In the first stage, the heuristic game is called.
@@ -419,22 +419,27 @@ def fixedPointToStackelberg(linear_data, fixed_point_data, n_price_levels, price
     # Initial number of strategy per operator
     fp_data['n_price_levels'] = n_price_levels
     # Set the price lower and upper bound
-    fp_data['lb_p'] = copy.deepcopy(lb_p)
-    fp_data['ub_p'] = copy.deepcopy(ub_p)
+    for i in range(fp_data['I_opt_out'], fp_data['I_opt_out'] + fp_data['I']):
+        fp_data['lb_p'][i] = lb_p[i]
+        fp_data['ub_p'][i] = ub_p[i]
+    # Preprocess the data based on capacity parameter
+    if capacity is None:
+        fp_data.pop('capacity', None)
+        fixed_point_data.preprocess(fp_data)
+    else:
+        fp_data['capacity'] = capacity
+        fixed_point_data.preprocess(fp_data)
+
     # While the fixed point model is not accurate enough, add more strategies
     # and re-launch the fixed-point model
     accurate = False
     while accurate is False:
-        # Preprocess the data based on capacity parameter
+        # Keep track of the duration of the run
+        t0 = time.time()
+        # Instanciate the MILP fixed point model
         if capacity is None:
-            fp_data.pop('capacity', None)
-            fixed_point_data.preprocess(fp_data)
-            # Instanciate a Fixed point method game and solve it
             fixed_point_game = fixed_point_no_capacity.Fixed_Point(**fp_data)
         else:
-            fp_data['capacity'] = capacity
-            fixed_point_data.preprocess(fp_data)
-            # Instanciate a Fixed point method game and solve it
             fixed_point_game = fixed_point.Fixed_Point(**fp_data)
 
         # Solve the model
@@ -465,7 +470,13 @@ def fixedPointToStackelberg(linear_data, fixed_point_data, n_price_levels, price
         # Revenue
         revenue_after_fixed_point = [0.0]
         for k in range(1, fp_data['K'] + 1):
-            revenue_after_fixed_point.append(model.solution.get_values('revenueAftMax[' + str(k) + ']'))
+            revenue = 0.0
+            for i in range(fp_data['I_opt_out'], fp_data['I_opt_out'] + fp_data['I']):
+                if fp_data['operator'][i] == k:
+                    for l in range(fp_data['n_price_levels']):
+                        if model.solution.get_values('vAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']') == 1.0:
+                            rev += model.solution.get_values('revenueAft[' + str(k) + ']' + '[' + str(i) + ']' + '[' + str(l) + ']')
+            revenue_after_fixed_point.append(rev)
 
         #### Run the Stackelberg games
         print('\nRun the Stackelberg games')
@@ -475,8 +486,9 @@ def fixedPointToStackelberg(linear_data, fixed_point_data, n_price_levels, price
         # Get the data and construct the keyword arguments for the stackelberg game
         l_data = linear_data.getData()
         # Set the price lower and upper bound
-        l_data['lb_p'] = copy.deepcopy(lb_p)
-        l_data['ub_p'] = copy.deepcopy(ub_p)
+        for i in range(l_data['I_opt_out'], l_data['I_opt_out'] + l_data['I']):
+            l_data['lb_p'][i] = lb_p[i]
+            l_data['ub_p'][i] = ub_p[i]
         # Add keyword arguments to fix the price of an operator
         l_data['operator'] = copy.deepcopy(fp_data['operator'])
         l_data['y_fixed'] = np.full((l_data['I'] + l_data['I_opt_out']), 1.0)
@@ -530,8 +542,19 @@ def fixedPointToStackelberg(linear_data, fixed_point_data, n_price_levels, price
             accurate = True
             print('Revenue tolerance satisfied. The fixed point model is accurate enough.')
         else:
-            # Increase the number of strategies for the next run
-            fp_data['n_price_levels'] = int(math.ceil(fp_data['n_price_levels']*1.5))
+            # Add the best response strategy found by the stackelberg game
+            # to the strategy set of the fixed-point MIP model
+            fp_data['n_price_levels'] += 1
+            # Convert to numpy array to list to append new strategy
+            previous_strategy = fp_data['p'].tolist()
+            for i in range((fp_data['I'] + fp_data['I_opt_out'])):
+                previous_strategy[i].append(price_after_stackelberg[i])
+                previous_strategy[i] = sorted(previous_strategy[i])
+            fp_data['p'] = np.asarray(copy.deepcopy(previous_strategy))
+            print('NEW STRATS: %r' %fp_data['p'])
+
+        print('-- TIME OF THE RUN: %r' %(time.time() - t0))
+
 
 if __name__ == '__main__':
     # Data for the heuristic game
@@ -556,10 +579,9 @@ if __name__ == '__main__':
                     'optimizer': 1,
                     'p_fixed': [-1, -1, -1, -1, -1, -1, 50.0, 50.0],
                     'y_fixed': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]}
-
+    '''
     # Run the heuristic intensification
     heuristicIntensification(non_linear_data, heu_keywords, 10, capacity=None)
-    '''
     # Run the heuristic towards MILP sequential method
     heuristicToMILP(non_linear_data, linear_data, heu_keywords, capacity=None)
     # Run the MILP sequential method toward the fixed-point model method
@@ -568,6 +590,8 @@ if __name__ == '__main__':
     cycles = [[[0.6, 0.7], [0.8, 0.9], [0.65, 0.85], [0.1, 0.2], [0.3, 0.4], [0.39, 0.45]],
               [[0.1, 0.2], [0.3, 0.4], [0.39, 0.45], [0.6, 0.7], [0.8, 0.9], [0.65, 0.85]]]
     cyclesToFixedPoint(cycles, fixed_point_data, 10, capacity=None)
-    # Run the fixed point towards Stackelberg game method
-    fixedPointToStackelberg(linear_data, fixed_point_data, 10, 0.02, 0.02, [0.0, 0.0, 0.0], [0.0, 1.0, 1.0], capacity=None)
     '''
+    lb_p = np.array([-1.0, -1.0, -1.0, -1.0, 79.54, 63.67, 69.08, 65.03])
+    ub_p = np.array([-1.0, -1.0, -1.0, -1.0, 80.23, 69.95, 80.34, 82.37])
+    # Run the fixed point towards Stackelberg game method
+    fixedPointToStackelberg(linear_data, fixed_point_data, 10, 0.1, 2, lb_p, ub_p, capacity=None)

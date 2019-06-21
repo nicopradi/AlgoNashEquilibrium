@@ -33,11 +33,10 @@ class NashHeuristic(object):
         self.K = kwargs.get('K', 2)
         self.I = kwargs.get('I', 2)
         self.I_opt_out = kwargs.get('I_opt_out', 1)
-        # TODO: For the moment, an operator is in charge of exactly one alternative
         self.operator = kwargs.get('operator')
         # TODO: For the moment, suppose endo_var contains only the price
-        # The keys correspond to an alternative,
-        # the values are the endogene variables for the corresponding alternative
+        # The keys correspond to an alternative id,
+        # the values are the endogene variables name
         self.endo_var = kwargs.get('endo_var')
         self.tolerance = kwargs.get('tolerance', 1e-3)
         # Set the optimizer to be the first operator
@@ -243,7 +242,6 @@ class NashHeuristic(object):
             else:
                 reverse_index = math.floor((price-lb)*step/(ub-lb))
             reverse_indices.append(reverse_index)
-        # TODO: Clean the lines below
         if len(reverse_indices) == 1:
             reverse_indices = reverse_indices[0]
         elif len(reverse_indices) == 2:
@@ -299,7 +297,6 @@ has already been visited before.'%(self.optimizer, prices))
                 else:
                     reverse_index = math.floor((price-lb)*step/(ub-lb))
                 reverse_indices.append(reverse_index)
-            # TODO: Clean the lines below
             if len(reverse_indices) == 1:
                 reverse_indices = reverse_indices[0]
             elif len(reverse_indices) == 2:

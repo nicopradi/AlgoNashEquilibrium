@@ -283,3 +283,5 @@ def preprocess(dict):
 if __name__ == '__main__':
     dict = getData()
     preprocess(dict)
+    import IPython
+    IPython.embed()

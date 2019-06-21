@@ -713,7 +713,7 @@ def preprocess(dict):
                     choices[n, r, l1, l2] = np.argmax([U[n, r, 0, l1], U[n, r, 1, l1], U[n, r, 2, l2]])
                     # Fill out the lower left part of the table if possible
                     if choices[n, r, l1, l2] == 2:
-                        fill = np.full((dict['n_price_levels']-l1, l2 + 1), 2)
+                        fill = np.full((dict['n_price_levels'] - l1, l2 + 1), 2)
                         choices[n, r, l1:, :(l2 + 1)] = fill
                         strat_alt_2 = strat_alt_2[:dict['n_price_levels'] - (l2 + 1)]
                         break

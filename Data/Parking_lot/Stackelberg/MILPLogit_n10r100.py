@@ -25,8 +25,8 @@ def getData():
 
     #dict['capacity'] = np.array([60.0, 6.0, 6.0]) # Availability for each alternative (opt-out always available)
 
-    dict['fixed_cost'] = [0.0, 0.2, 0.2] # Initial cost for each alternative
-    dict['customer_cost'] = [0.0, 0.1, 0.3] # Additional cost for each new customer
+    #dict['fixed_cost'] = [0.0, 0.2, 0.2] # Initial cost for each alternative
+    #dict['customer_cost'] = [0.0, 0.1, 0.3] # Additional cost for each new customer
 
     # Mapping between alternatives index and their names
     dict['name_mapping'] = {0: 'Opt-out', 1: 'PSP', 2: 'PUP'}

@@ -60,12 +60,12 @@ def getData():
     dict['xi'] = np.random.gumbel(size=(8, 20, 50))
 
     # Costs
-    #                                   CAR   PLANE  IC_1   IC_2   AV_1   AV_2   NTV_1  NTV_2
+    #                                  CAR   PLANE  IC_1   IC_2   AV_1   AV_2   NTV_1  NTV_2
     dict['fixed_cost'] =    np.array([00.00, 00.00, 00.00, 00.00, 150.0, 125.0, 150.0, 125.0]) # Initial cost for each alternative
     dict['customer_cost'] = np.array([00.00, 00.00, 00.00, 00.00, 20.00, 10.00, 20.00, 10.00]) # Additional cost for each new customer
 
     # Lower and upper bound on prices
-    #TODO : Adapt lower bound to the costs
+    #TODO : Adapt lower bound to the variable cost
     #                                 CAR                PLANE                IC_1                IC_2        AV_1   AV_2   NTV_1  NTV_2
     dict['lb_p'] = np.array([dict['PRICE_CAR'], dict['PRICE_PLANE'], dict['PRICE_IC_1'], dict['PRICE_IC_2'], 00.00, 00.00, 00.00, 00.00])
     dict['ub_p'] = np.array([dict['PRICE_CAR'], dict['PRICE_PLANE'], dict['PRICE_IC_1'], dict['PRICE_IC_2'], 100.0, 100.0, 100.0, 100.0])
@@ -165,7 +165,6 @@ def preprocess(dict):
     dict['exo_utility'] = exo_utility
 
     # Beta coefficient for endogenous variables
-    #TODO: Reduce dimension of endo_coef
     endo_coef = np.full([dict['I'] + dict['I_opt_out'], dict['N']], 0.0)
     for n in range(dict['N']):
         if dict['LOW_INCOME'][n] == 1:
