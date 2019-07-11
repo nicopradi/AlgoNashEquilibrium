@@ -11,7 +11,7 @@ from cplex.exceptions import CplexSolverError
 # numpy
 import numpy as np
 # data
-import Data.Italian.Stackelberg.MILPLogit_n10r01 as data_file
+import Data.Italian.Stackelberg.MILPLogit_n40r50 as data_file
 import Data.Italian.Non_linear_Stackelberg.ProbLogit_n40 as data_file_2
 
 # Stackelberg
@@ -217,33 +217,26 @@ class Sequential:
 
 
 if __name__ == '__main__':
-    '''
+
     # LINEAR
     t_0 = time.time()
-    stackelberg_dict = data_file.getInfo()
-    stackelberg_dict = data_file.getData(stackelberg_dict)
+    stackelberg_dict = data_file.getData()
     data_file.preprocess(stackelberg_dict)
     t_1 = time.time()
     sequential_dict = {'K': 2,
                     'operator': [0, 0, 0, 0,
-                                 0, 0, 0, 0, 0, 0, 0,
-                                 0, 0, 0, 0, 0, 0, 0,
-                                 0, 0, 0, 0, 0, 0,
-                                 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, 0,
                                  1, 1, 2, 2],
                     'max_iter': 50,
                     'optimizer': 1,
                     'p_fixed': [-1.0, -1.0, -1.0, -1.0,
-                                 125, 125, 125, 125, 125, 125, 125,
-                                  80,  80,  80,  80,  80,  80,  80,
-                                 105, 105, 105, 105, 105, 105,
-                                  60,  60,  60,  60,  60,  60,
+                                 125,
+                                  80,
+                                 105,
+                                  60,
                                 -1.0,-1.0,  105,  60],
                     'y_fixed': [1.0, 1.0, 1.0, 1.0,
-                                1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-                                1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-                                1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-                                1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+                                1.0, 1.0, 1.0, 1.0,
                                 1.0, 1.0, 1.0, 1.0]}
     sequential_game = Sequential(**sequential_dict)
     # Update the dict with the attributes of the Stackelberg game
@@ -261,9 +254,8 @@ if __name__ == '__main__':
     print('n: %r and r: %r' %(sequential_dict['N'], sequential_dict['R']))
     sequential_game.plotGraphs('test')
     sequential_game.plotGraphs(0.2)
+
     '''
-
-
     # NON LINEAR
     t_0 = time.time()
     stackelberg_dict = data_file_2.getData()
@@ -300,6 +292,7 @@ if __name__ == '__main__':
     nb_iter = len([price[0] for price in sequential_game.p_history if price[0] != -1])
     print('Total number of iterations: %r' %nb_iter)
     sequential_game.plotGraphs('italy')
+    '''
 
     '''
     # NON LINEAR
