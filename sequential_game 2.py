@@ -12,7 +12,7 @@ from cplex.exceptions import CplexSolverError
 import numpy as np
 # data
 import Data.Italian.Stackelberg.MILPLogit_n10r01 as data_file
-import Data.Italian.Non_linear_Stackelberg.ProbLogit_n01_calibrate as data_file_2
+import Data.Italian.Non_linear_Stackelberg.ProbLogit_n40 as data_file_2
 
 # Stackelberg
 import stackelberg_game
@@ -85,6 +85,8 @@ class Sequential:
                             cust_U[iter, i, n, r] = model.solution.get_values('U[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']')
             else:
                 prices, choice, x, status, status_msg = non_linear_stackelberg.main(data)
+                print('After optimization:')
+                non_linear_stackelberg.objective(data, x)
                 demand = []
                 for i in range(len(self.operator)):
                     demand.append(np.sum([customer for customer in choice[i*data['N']:(i+1)*data['N']]]))
@@ -102,7 +104,7 @@ class Sequential:
             # The operator setting his prices has to increase his revenue
             if( iter > 1 ):
                 print('New revenue: %r / Old revenue : %r' %(self.revenue[iter, self.optimizer], self.revenue[iter - 1, self.optimizer]))
-                #assert(self.revenue[iter, self.optimizer] >= self.revenue[iter - 1, self.optimizer] - 1e-3)
+                assert(self.revenue[iter, self.optimizer] >= self.revenue[iter - 1, self.optimizer] - 1e-3)
             # Update the market share history
             for i in range(len(self.operator)):
                 self.market_share[iter, i] = float(demand[i])/data['N']
@@ -264,8 +266,45 @@ if __name__ == '__main__':
 
     # NON LINEAR
     t_0 = time.time()
-    stackelberg_dict = data_file_2.getInfo()
-    stackelberg_dict = data_file_2.getData(stackelberg_dict)
+    stackelberg_dict = data_file_2.getData()
+    data_file_2.preprocess(stackelberg_dict)
+    t_1 = time.time()
+    sequential_dict = {'K': 2,
+                    'operator': [0, 0, 0, 0,
+                                 0, 0, 0, 0,
+                                 1, 1, 2, 2],
+                    'max_iter': 50,
+                    'optimizer': 1,
+                    'p_fixed': [-1.0, -1.0, -1.0, -1.0,
+                                 125,
+                                  80,
+                                 105,
+                                  60,
+                                -1.0,-1.0,  105,  60],
+                    'y_fixed': [1.0, 1.0, 1.0, 1.0,
+                                1.0, 1.0, 1.0, 1.0,
+                                1.0, 1.0, 1.0, 1.0]}
+    sequential_game = Sequential(**sequential_dict)
+    # Update the dict with the attributes for the Stackelberg game
+    sequential_dict.update(stackelberg_dict)
+    #sequential_dict['x0'] = non_linear_stackelberg.getInitialPoint(sequential_dict)
+    #print('x0:', sequential_dict['x0'])
+    t_2 = time.time()
+    #stackelberg_dict['x0'] = non_linear_stackelberg.getInitialPoint(stackelberg_dict)
+    sequential_game.run(sequential_dict, linearized=False)
+    t_3 = time.time()
+    print('\n -- TIMING -- ')
+    print('Get data + Preprocess: %r sec' %(t_1 - t_0))
+    print('Update dictionary, initiate sequential game: %r sec' %(t_2 - t_1))
+    print('Run the game: %r sec' %(t_3 - t_2))
+    nb_iter = len([price[0] for price in sequential_game.p_history if price[0] != -1])
+    print('Total number of iterations: %r' %nb_iter)
+    sequential_game.plotGraphs('italy')
+
+    '''
+    # NON LINEAR
+    t_0 = time.time()
+    stackelberg_dict = data_file_2.getData()
     data_file_2.preprocess(stackelberg_dict)
     t_1 = time.time()
     sequential_dict = {'K': 2,
@@ -275,14 +314,14 @@ if __name__ == '__main__':
                                  0, 0, 0, 0, 0, 0,
                                  0, 0, 0, 0, 0, 0,
                                  1, 1, 2, 2],
-                    'max_iter': 500,
+                    'max_iter': 50,
                     'optimizer': 1,
-                    'p_fixed': [104.79, 153.0, 60.0, 30.0,
+                    'p_fixed': [-1.0, -1.0, -1.0, -1.0,
                                  125, 125, 125, 125, 125, 125, 125,
                                   80,  80,  80,  80,  80,  80,  80,
                                  105, 105, 105, 105, 105, 105,
-                                  60.0,  60.0,  60.0,  60.0,  60.0,  60.0,
-                                -1.0,-1.0,  105.0,  60.0],
+                                  60,  60,  60,  60,  60,  60,
+                                -1.0,-1.0,  105,  60],
                     'y_fixed': [1.0, 1.0, 1.0, 1.0,
                                 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
                                 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
@@ -305,33 +344,4 @@ if __name__ == '__main__':
     nb_iter = len([price[0] for price in sequential_game.p_history if price[0] != -1])
     print('Total number of iterations: %r' %nb_iter)
     sequential_game.plotGraphs('italy')
-
-
-
     '''
-    t_0 = time.time()
-    stackelberg_dict = data_file_3.getData()
-    data_file_3.preprocess(stackelberg_dict)
-    t_1 = time.time()
-    sequential_dict = {'K': 2,
-                    'operator': [0, 0, 0, 0,
-                                 1, 1, 2, 2],
-                    'max_iter': 10,
-                    'optimizer': 1,
-                    'p_fixed': [-1, -1, -1, -1, -1, -1, 50.0, 50.0],
-                    'y_fixed': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,]}
-    sequential_game = Sequential(**sequential_dict)
-    # Update the dict with the attributes for the Stackelberg game
-    sequential_dict.update(stackelberg_dict)
-    t_2 = time.time()
-    sequential_game.run(sequential_dict, linearized=False)
-    t_3 = time.time()
-    print('\n -- TIMING -- ')
-    print('Get data + Preprocess: %r sec' %(t_1 - t_0))
-    print('Update dictionary, initiate sequential game: %r sec' %(t_2 - t_1))
-    print('Run the game: %r sec' %(t_3 - t_2))
-    nb_iter = len([price[0] for price in sequential_game.p_history if price[0] != -1])
-    print('Total number of iterations: %r' %nb_iter)
-    sequential_game.plotGraphs(0.2)
-    '''
-

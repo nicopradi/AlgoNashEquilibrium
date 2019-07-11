@@ -701,6 +701,10 @@ def main(data, tol=1e-3):
         data['x0'] = x0
     else:
         x0 = getInitialPoint(data)
+        data['x0'] = x0
+
+    print('Objective value at initial point')
+    objective(data, x0)
 
     #print('value of x0:', data['x0'])
 
@@ -816,7 +820,7 @@ def main(data, tol=1e-3):
         choice_end = data['I'] + data['I_opt_out'] + 2*data['N']*(data['I'] + data['I_opt_out'])
 
     # Return the price, choice, whole solution and info variables
-    return x[:data['I'] + data['I_opt_out']], x0[choice_start:choice_end], x, info['status'], info['status_msg']
+    return x[:data['I'] + data['I_opt_out']], x[choice_start:choice_end], x, info['status'], info['status_msg']
 
 def getInitialPoint(data, previous_solution=None):
     ''' Compute an initial feasible solution to the best response game.
@@ -842,7 +846,7 @@ def getInitialPoint(data, previous_solution=None):
             if previous_solution is not None:
                 x0.append(previous_solution[i])
             else:
-                x0.append((data['ub_p'][i]/1.0)) # (data['ub_p'][i]+data['lb_p'][i])/2.0
+                x0.append((data['lb_p'][i])/1.0) # (data['ub_p'][i]+data['lb_p'][i])/2.0
         p_index[i] = count
         count += 1
 
@@ -960,40 +964,91 @@ def getInitialPoint(data, previous_solution=None):
 
     return x0
 
+# Prints prices, utility and choice for each alternative and each customer
 def printSolution(data, x, info):
 
     print('\nResults:')
     print('Decision variables: \n')
     counter = 0
-    # Price variables
+    # Price variables -- Only print prices of non-opt-out alternatives
     for i in range(data['I'] + data['I_opt_out']):
-        print('Price of alternative %r: %r'%(i, x[counter]))
+        if( data['operator'][i] != 0 ):
+            print('Price of alternative %r: %r'%(i, x[counter]))
         counter += 1
     print('\n')
 
-    # Utility variables
+    # Utility variables -- Only print utility of non-opt-out alternatives
     for i in range(data['I'] + data['I_opt_out']):
         for n in range(data['N']):
-            print('Utility of alternative %r for user %r : %r'%(i, n, x[counter]))
+            if( data['operator'][i] != 0 ):
+                print('Utility of alternative %r for user %r : %r'%(i, n, x[counter]))
             counter += 1
     print('\n')
-    # Choice variables
+
+    # Choice variables -- Only print choice probability of non-opt-out alternatives
     for i in range(data['I'] + data['I_opt_out']):
         for n in range(data['N']):
-            print('Choice of alternative %r for user %r : %r'%(i, n, x[counter]))
+            if( data['operator'][i] != 0 ):
+                print('Choice of alternative %r for user %r : %r'%(i, n, x[counter]))
             counter += 1
     print('\n')
-    # Availability variables
+
+    # Availability variables -- Only print availabilities of non-opt-out alternatives
     if 'capacity' in data.keys():
         for i in range(data['I'] + data['I_opt_out']):
             for n in range(data['N']):
-                print('Availability of alternative %r for user %r : %r'%(i, n, x[counter]))
+                if( data['operator'][i] != 0 ):
+                    print('Availability of alternative %r for user %r : %r'%(i, n, x[counter]))
                 counter += 1
         print('\n')
 
     print("Objective function(revenue) = %r\n" % info['obj_val'])
 
+# Compute the revenue of the curent data['optimizer'] with given solution x
+def objective(data, x):
+    ''' The function to compute the objective value of the problem
+    '''
+    # Recall that the first I + I_opt_out entries of x correspond to prices
+    # Then there is an entry corresponding to an U_in for i in I, n in N
+    # Then one entry for the choice probability w_in for i in I, n in N
+    # Finally, entry for each capacity
 
+    assert('R_coef' not in data.keys())
+
+    # Define prices
+    prices = x[:data['I'] + data['I_opt_out']]
+
+    # Define choices
+    choice_start = data['I'] + data['I_opt_out'] + data['N']*(data['I'] + data['I_opt_out'])
+    choice_end = data['I'] + data['I_opt_out'] + 2*data['N']*(data['I'] + data['I_opt_out'])
+    choice = x[choice_start:choice_end]
+
+    expression = 0.0
+    # Add revenue to the objective function
+    for i in range(data['I'] + data['I_opt_out']):
+        # Consider the alternatives managed by the optimizer only
+        if( data['optimizer'] is None) or (data['operator'][i] == data['optimizer'] ):
+            for n in range(data['N']):
+                # Note that this is a minimization problem.
+                expression += (prices[i] * choice[i * data['N'] + n])
+                # print('Price %r probability %r, item %r' %(prices[i], choice[i * data['N'] + n], i * data['N'] + n))
+
+
+        # Add the initial cost and customer cost
+        if( 'fixed_cost' in data.keys() ):
+            for i in range(data['I'] + data['I_opt_out']):
+                if( data['optimizer'] is None) or (data['operator'][i] == data['optimizer'] ):
+                    # Initial cost
+                    expression -= data['fixed_cost'][i]
+                    # Customer cost
+                    if( 'customer_cost' in data.keys() ):
+                        for n in range(data['N']):
+                            expression -= data['customer_cost'][i] * choice[i * (n + 1) + n]
+
+    print('Optimizer %r has objective value evaluate at x is equal to: %r \n' %( data['optimizer'], expression))
+    #print(x)
+
+# Main function
 if __name__ == '__main__':
     # Get the data and preprocess
     data = data_file.getData()
