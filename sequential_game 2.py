@@ -11,13 +11,14 @@ from cplex.exceptions import CplexSolverError
 # numpy
 import numpy as np
 # data
-import Data.Italian.Stackelberg.MILPLogit_n40r50 as data_file
-import Data.Italian.Non_linear_Stackelberg.ProbLogit_n40 as data_file_2
+import Data.Italian.Stackelberg.MILPNested_n40r50 as data_file
+import Data.Italian.Non_linear_Stackelberg.ProbLogit_n10 as data_file_2
+import Data.Italian.Non_linear_Stackelberg.Nested_Logit.nested_n01 as df
 
 # Stackelberg
 import stackelberg_game
 import non_linear_stackelberg
-import non_linear_stackelberg_italian
+import non_linear_nested_stackelberg
 
 class Sequential:
 
@@ -45,7 +46,8 @@ class Sequential:
         # Make a copy of the initial prices
         self.initial_price = copy.deepcopy(self.p_fixed)
 
-    def run(self, data, linearized=True):
+    # Run the sequential game
+    def run(self, data, linearized=True, nested=False):
         ''' Run the sequential game with the Stackelberg game
             Args:
                 data:          dictionary containing data to instanciate the Stackelberg game
@@ -84,9 +86,16 @@ class Sequential:
                             cust_choice[iter, i, n, r] = model.solution.get_values('w[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']')
                             cust_U[iter, i, n, r] = model.solution.get_values('U[' + str(i) + ']' + '[' + str(n) + ']' + '[' + str(r) + ']')
             else:
-                prices, choice, x, status, status_msg = non_linear_stackelberg.main(data)
-                print('After optimization:')
-                non_linear_stackelberg.objective(data, x)
+                if( nested is False ):
+                    # Solves the non-linear logit version
+                    prices, choice, x, status, status_msg = non_linear_stackelberg.main(data)
+
+                    # Computes and print objective function of the non-linear stackelberg game of current optimizer
+                    non_linear_stackelberg.objective(data, x)
+                else:
+                    prices, choice, x, status, status_msg = non_linear_nested_stackelberg.main(data)
+
+
                 demand = []
                 for i in range(len(self.operator)):
                     demand.append(np.sum([customer for customer in choice[i*data['N']:(i+1)*data['N']]]))
@@ -95,20 +104,22 @@ class Sequential:
             # Update the price history
             for i in range(len(self.operator)):
                 self.p_history[iter, i] = prices[i]
+
             # Update the revenue history
             for k in range(self.K + 1):
                 self.revenue[iter][k] = 0.0
                 alternatives = [i for i in range(len(self.operator)) if self.operator[i] == k]
                 for i in alternatives:
                     self.revenue[iter][k] += demand[i]*prices[i]
-            # The operator setting his prices has to increase his revenue
+
+            # Check that optimizer increased his revenue after optimization
             if( iter > 1 ):
                 print('New revenue: %r / Old revenue : %r' %(self.revenue[iter, self.optimizer], self.revenue[iter - 1, self.optimizer]))
                 assert(self.revenue[iter, self.optimizer] >= self.revenue[iter - 1, self.optimizer] - 1e-3)
+
             # Update the market share history
             for i in range(len(self.operator)):
                 self.market_share[iter, i] = float(demand[i])/data['N']
-
 
             # print some informations about current iteration
             print(' ----------- Problem solved ------------------ ')
@@ -137,7 +148,7 @@ class Sequential:
 
             # Check for the cycle
             # First check if all operators have played.
-            if iter >= self.K:
+            if( iter >= self.K ):
                 iteration_to_check = range(iter-self.K, -1, -self.K)
                 print('ITERATION TO CHECK: %r' %list(iteration_to_check))
                 for j in iteration_to_check:
@@ -153,6 +164,7 @@ class Sequential:
                         else:
                             print('\nCycle detected')
                         break
+
             # Update the data for the next iteration
             data['optimizer'] = ((data['optimizer']) % self.K) + 1
             self.optimizer = data['optimizer']
@@ -215,7 +227,7 @@ class Sequential:
         plt.savefig('market_history_%r.png' %(title))
         plt.close()
 
-
+# Main function -- read data file and solve the sequential game (linearized or non-linearized)
 if __name__ == '__main__':
 
     # LINEAR
@@ -242,7 +254,7 @@ if __name__ == '__main__':
     # Update the dict with the attributes of the Stackelberg game
     sequential_dict.update(stackelberg_dict)
     t_2 = time.time()
-    sequential_game.run(sequential_dict, linearized=True)
+    sequential_game.run(sequential_dict, linearized=True, nested=False)
     t_3 = time.time()
     print('\n -- TIMING -- ')
     print('Get data + Preprocess: %r sec' %(t_1 - t_0))
@@ -283,7 +295,7 @@ if __name__ == '__main__':
     #print('x0:', sequential_dict['x0'])
     t_2 = time.time()
     #stackelberg_dict['x0'] = non_linear_stackelberg.getInitialPoint(stackelberg_dict)
-    sequential_game.run(sequential_dict, linearized=False)
+    sequential_game.run(sequential_dict, linearized=False, nested=False)
     t_3 = time.time()
     print('\n -- TIMING -- ')
     print('Get data + Preprocess: %r sec' %(t_1 - t_0))
@@ -295,31 +307,25 @@ if __name__ == '__main__':
     '''
 
     '''
-    # NON LINEAR
+    # NON LINEAR NESTED
     t_0 = time.time()
-    stackelberg_dict = data_file_2.getData()
-    data_file_2.preprocess(stackelberg_dict)
+    stackelberg_dict = df.getData()
+    df.preprocess(stackelberg_dict)
     t_1 = time.time()
     sequential_dict = {'K': 2,
                     'operator': [0, 0, 0, 0,
-                                 0, 0, 0, 0, 0, 0, 0,
-                                 0, 0, 0, 0, 0, 0, 0,
-                                 0, 0, 0, 0, 0, 0,
-                                 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, 0,
                                  1, 1, 2, 2],
                     'max_iter': 50,
                     'optimizer': 1,
                     'p_fixed': [-1.0, -1.0, -1.0, -1.0,
-                                 125, 125, 125, 125, 125, 125, 125,
-                                  80,  80,  80,  80,  80,  80,  80,
-                                 105, 105, 105, 105, 105, 105,
-                                  60,  60,  60,  60,  60,  60,
+                                 125,
+                                  80,
+                                 105,
+                                  60,
                                 -1.0,-1.0,  105,  60],
                     'y_fixed': [1.0, 1.0, 1.0, 1.0,
-                                1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-                                1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-                                1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-                                1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+                                1.0, 1.0, 1.0, 1.0,
                                 1.0, 1.0, 1.0, 1.0]}
     sequential_game = Sequential(**sequential_dict)
     # Update the dict with the attributes for the Stackelberg game
@@ -328,7 +334,7 @@ if __name__ == '__main__':
     #print('x0:', sequential_dict['x0'])
     t_2 = time.time()
     #stackelberg_dict['x0'] = non_linear_stackelberg.getInitialPoint(stackelberg_dict)
-    sequential_game.run(sequential_dict, linearized=False)
+    sequential_game.run(sequential_dict, linearized=False, nested=True)
     t_3 = time.time()
     print('\n -- TIMING -- ')
     print('Get data + Preprocess: %r sec' %(t_1 - t_0))
