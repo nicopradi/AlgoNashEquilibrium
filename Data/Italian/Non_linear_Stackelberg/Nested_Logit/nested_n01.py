@@ -186,8 +186,6 @@ def getData():
     # reverse mapping between every alternative and the corresponding nest
     dict['map'] = {0: 0, 1: 1, 2: 0, 3: 0, 4: 2, 5: 2, 6: 2, 7: 2, 8: 2, 9: 2, 10: 2, 11: 2}
 
-    dict['optimizer'] = 0
-
     # Capacities (not needed if only 1 person) -- opt-out always available
     #dict['capacity'] = np.concatenate((dict['N'] * np.ones(dict['I_opt_out']),
     #                                   np.array([1.0, dict['N'], 1.0, dict['N']])))

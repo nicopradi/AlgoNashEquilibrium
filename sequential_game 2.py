@@ -11,7 +11,7 @@ from cplex.exceptions import CplexSolverError
 # numpy
 import numpy as np
 # data
-import Data.Italian.Stackelberg.MILPNested_n40r50 as data_file
+import Data.Italian.Stackelberg.MILPNested_n10r01 as data_file
 import Data.Italian.Non_linear_Stackelberg.ProbLogit_n10 as data_file_2
 import Data.Italian.Non_linear_Stackelberg.Nested_Logit.nested_n01 as df
 
@@ -229,7 +229,7 @@ class Sequential:
 
 # Main function -- read data file and solve the sequential game (linearized or non-linearized)
 if __name__ == '__main__':
-
+    '''
     # LINEAR
     t_0 = time.time()
     stackelberg_dict = data_file.getData()
@@ -266,6 +266,7 @@ if __name__ == '__main__':
     print('n: %r and r: %r' %(sequential_dict['N'], sequential_dict['R']))
     sequential_game.plotGraphs('test')
     sequential_game.plotGraphs(0.2)
+    '''
 
     '''
     # NON LINEAR
@@ -306,7 +307,6 @@ if __name__ == '__main__':
     sequential_game.plotGraphs('italy')
     '''
 
-    '''
     # NON LINEAR NESTED
     t_0 = time.time()
     stackelberg_dict = df.getData()
@@ -318,7 +318,7 @@ if __name__ == '__main__':
                                  1, 1, 2, 2],
                     'max_iter': 50,
                     'optimizer': 1,
-                    'p_fixed': [-1.0, -1.0, -1.0, -1.0,
+                    'p_fixed': [0.0, 0.0, 0.0, 0.0,
                                  125,
                                   80,
                                  105,
@@ -343,4 +343,3 @@ if __name__ == '__main__':
     nb_iter = len([price[0] for price in sequential_game.p_history if price[0] != -1])
     print('Total number of iterations: %r' %nb_iter)
     sequential_game.plotGraphs('italy')
-    '''

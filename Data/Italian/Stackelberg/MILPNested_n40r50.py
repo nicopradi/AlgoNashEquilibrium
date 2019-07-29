@@ -174,7 +174,7 @@ def getData():
     # The general error term is the sum of both terms.
     np.random.seed(1)
     #dict['xi'] = np.random.gumbel(size=(dict['I'] + dict['I_opt_out'], dict['N'], dict['R']))
-    xi_nest = np.zeros((dict['I']+dict['I_opt_out'], dict['N'], dict['R']))
+    xi_nest = np.random.gumbel((dict['I']+dict['I_opt_out'], dict['N'], dict['R']))
     xi_alt = np.empty((dict['I'] + dict['I_opt_out'], dict['N'], dict['R']))
     for i in range(dict['I'] + dict['I_opt_out']):
         for n in range(dict['N']):
