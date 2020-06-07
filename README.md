@@ -1,6 +1,5 @@
-# Project Title
+# Master Project: Heuristic algorithms to find market equilibria in oligopolies.
 
-Heuristic algorithms to find market equilibria in oligopolies.
 Project developed within the scope of a Master's project at EPFL.
 
 ## Getting Started
